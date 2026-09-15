@@ -122,6 +122,8 @@ export default function RoomPage() {
           view={view}
           onStart={room.start}
           onKick={room.kick}
+          onAddBot={room.addBot}
+          onRemoveBot={room.removeBot}
           onSettings={room.updateSettings}
           onSwitchSeat={room.join}
           onLeave={leave}

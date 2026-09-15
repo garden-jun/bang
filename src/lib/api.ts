@@ -80,6 +80,9 @@ export const api = {
   settings: (code: string, s: Partial<RoomSettings>) => request<RoomView>(`/api/rooms/${code}/settings`, { method: "POST", json: s }),
   start: (code: string) => request<RoomView>(`/api/rooms/${code}/start`, { method: "POST" }),
   action: (code: string, action: Action) => request<RoomView>(`/api/rooms/${code}/action`, { method: "POST", json: action }),
+  addBot: (code: string) => request<RoomView>(`/api/rooms/${code}/bot`, { method: "POST" }),
+  removeBot: (code: string, botId: string) =>
+    request<RoomView>(`/api/rooms/${code}/bot`, { method: "DELETE", json: { botId } }),
   kick: (code: string, playerId: string) => request<RoomView>(`/api/rooms/${code}/kick`, { method: "POST", json: { playerId } }),
   reset: (code: string) => request<RoomView>(`/api/rooms/${code}/reset`, { method: "POST" }),
 };

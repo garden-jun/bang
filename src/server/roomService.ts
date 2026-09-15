@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { applyAction, forfeit } from "@/game/engine";
 import { randomSeed } from "@/game/rng";
 import { MAX_PLAYERS, MIN_PLAYERS } from "@/game/roles";
@@ -33,12 +34,20 @@ function seatOf(room: RoomState, playerId: string): RoomView["me"]["seat"] {
 }
 
 function isConnected(m: RoomMember, now: number): boolean {
+  // 봇은 폴링하지 않으므로 lastSeen이 갱신되지 않는다. 항상 접속 상태로 본다 —
+  // 아니면 applyTimeouts가 봇 차례를 끊긴 것으로 보고 먼저 처리해 버린다.
+  if (m.isBot) return true;
   return now - m.lastSeen < DISCONNECT_AFTER_MS;
 }
 
 export function toRoomView(room: RoomState, session: Session, now: number): RoomView {
   const seat = seatOf(room, session.playerId);
-  const memberView = (m: RoomMember) => ({ id: m.id, nickname: m.nickname, connected: isConnected(m, now) });
+  const memberView = (m: RoomMember) => ({
+    id: m.id,
+    nickname: m.nickname,
+    connected: isConnected(m, now),
+    ...(m.isBot ? { isBot: true as const } : {}),
+  });
   const game = room.game
     ? toView(
         room.game,
@@ -227,7 +236,9 @@ export async function leaveRoom(session: Session, code: string): Promise<void> {
       room.hostId = room.players[0]?.id ?? room.spectators[0]?.id ?? "";
     }
     tick(room, now);
-    empty = room.players.length === 0 && room.spectators.length === 0;
+    // 봇만 남은 방은 아무도 폴링하지 않아 그대로 방치된다 — 같이 닫는다
+    const humans = [...room.players, ...room.spectators].filter((m) => !m.isBot);
+    empty = humans.length === 0;
     return { room: empty ? null : room, result: undefined };
   });
   await setRoomOf(session.playerId, null);
@@ -321,7 +332,38 @@ export async function kickPlayer(session: Session, code: string, targetId: strin
     room.players = room.players.filter((p) => p.id !== targetId);
     room.spectators = room.spectators.filter((p) => p.id !== targetId);
     if (before === room.players.length + room.spectators.length) throw new ApiError(404, "그런 참가자가 없습니다.");
-    await setRoomOf(targetId, null);
+    if (!targetId.startsWith("bot:")) await setRoomOf(targetId, null);
+    const now = Date.now();
+    tick(room, now, session.playerId);
+    return { room, result: toRoomView(room, session, now) };
+  });
+}
+
+const BOT_NAMES = ["빌리", "제이크", "한스", "몰리", "듀크", "사샤", "에드", "로지"];
+
+/** 방장이 AI 봇을 자리에 앉힌다 */
+export async function addBot(session: Session, code: string): Promise<RoomView> {
+  return withRoomLock(code, async (room) => {
+    requireHost(room, session);
+    if (room.status !== "waiting") throw new ApiError(400, "대기실에서만 봇을 추가할 수 있습니다.");
+    if (room.players.length >= room.settings.maxPlayers) throw new ApiError(400, "자리가 가득 찼습니다.");
+
+    const taken = new Set(room.players.map((p) => p.nickname));
+    const base = BOT_NAMES.find((n) => !taken.has(n)) ?? `봇${room.players.length}`;
+    const now = Date.now();
+    room.players.push({ id: `bot:${randomUUID()}`, nickname: base, lastSeen: now, isBot: true });
+    tick(room, now, session.playerId);
+    return { room, result: toRoomView(room, session, now) };
+  });
+}
+
+export async function removeBot(session: Session, code: string, botId: string): Promise<RoomView> {
+  return withRoomLock(code, async (room) => {
+    requireHost(room, session);
+    if (room.status !== "waiting") throw new ApiError(400, "대기실에서만 봇을 뺄 수 있습니다.");
+    const bot = room.players.find((p) => p.id === botId && p.isBot);
+    if (!bot) throw new ApiError(404, "그런 봇이 없습니다.");
+    room.players = room.players.filter((p) => p.id !== botId);
     const now = Date.now();
     tick(room, now, session.playerId);
     return { room, result: toRoomView(room, session, now) };

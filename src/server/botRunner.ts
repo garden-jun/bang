@@ -1,0 +1,72 @@
+import { botCandidates } from "@/game/bot";
+import { responder } from "@/game/core";
+import { applyAction } from "@/game/engine";
+import { toView } from "@/game/view";
+import type { RoomState, RoomView } from "@/shared/types";
+import { chooseCandidate } from "./llm";
+import { getStore } from "./store";
+import { loadRoom, withRoomLock } from "./room";
+
+/** 한 번 불렸을 때 이어서 둘 수 있는 최대 수 (봇끼리 무한히 도는 것 방지) */
+const MAX_MOVES = 24;
+
+/**
+ * 지금 행동해야 할 사람이 봇이면 대신 둔다. 연속된 봇 차례는 이어서 처리한다.
+ *
+ * 응답을 붙잡지 않도록 라우트에서 `after()`로 부른다. Vercel에는 상주
+ * 프로세스가 없으므로, "봇 차례"를 알아채는 시점은 결국 상태를 바꾼 요청뿐이다.
+ */
+export async function runBots(code: string): Promise<void> {
+  for (let i = 0; i < MAX_MOVES; i++) {
+    const room = await loadRoom(code, true);
+    if (!room?.game || room.status !== "playing" || room.game.winner) return;
+
+    const who = responder(room.game);
+    if (!isBot(room, who)) return;
+
+    // 같은 상태를 두 요청이 동시에 굴리지 않게 한 번만 잡는다.
+    // 버전을 키에 넣어서, 다음 수는 다시 경쟁할 수 있게 둔다.
+    const loadedVersion = room.version;
+    const claim = `botmove:${code}:${loadedVersion}`;
+    if (!(await getStore().setNx(claim, 1, 20_000))) return;
+
+    const candidates = botCandidates(room.game, who);
+    if (candidates.length === 0) return;
+
+    // LLM은 락 밖에서 부른다 — 락 TTL(3초)보다 오래 걸릴 수 있다
+    const view = toView(room.game, { kind: "player", id: who });
+    const idx = await chooseCandidate(view, who, candidates);
+    const action = candidates[idx].action;
+
+    const applied = await withRoomLock(code, async (fresh) => {
+      // 기다리는 동안 사람이 뭔가 했으면 이 수는 버린다
+      if (fresh.version - 1 !== loadedVersion || !fresh.game || fresh.status !== "playing") {
+        return { room: null, result: false };
+      }
+      if (responder(fresh.game) !== who) return { room: null, result: false };
+      try {
+        fresh.game = applyAction(fresh.game, who, action, Date.now());
+      } catch {
+        // 후보가 거부되는 건 버그지만, 판을 멈추느니 넘긴다
+        return { room: null, result: false };
+      }
+      if (fresh.game.winner) fresh.status = "finished";
+      return { room: fresh, result: true };
+    }).catch(() => false);
+
+    if (!applied) return;
+  }
+}
+
+function isBot(room: RoomState, playerId: string): boolean {
+  return !!room.players.find((p) => p.id === playerId)?.isBot;
+}
+
+/**
+ * 봇이 둘 차례인가 — 라우트가 `after(runBots)`를 걸지 판단할 때 쓴다.
+ * 이미 만들어둔 뷰로 판단하므로 Redis를 더 읽지 않는다.
+ */
+export function botShouldMove(view: RoomView): boolean {
+  if (!view.game || view.status !== "playing" || view.game.winner) return false;
+  return !!view.players.find((p) => p.id === view.game!.responder)?.isBot;
+}

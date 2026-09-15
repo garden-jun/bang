@@ -96,6 +96,8 @@ export function useRoom(code: string, enabled: boolean) {
     start: () => wrap(() => api.start(code)),
     reset: () => wrap(() => api.reset(code)),
     kick: (id: string) => wrap(() => api.kick(code, id)),
+    addBot: () => wrap(() => api.addBot(code)),
+    removeBot: (id: string) => wrap(() => api.removeBot(code, id)),
     updateSettings: (s: Parameters<typeof api.settings>[1]) => wrap(() => api.settings(code, s)),
     join: (as: "player" | "spectator") => wrap(() => api.join(code, as)),
     leave: () => api.leave(code),

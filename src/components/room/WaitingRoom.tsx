@@ -9,6 +9,8 @@ export function WaitingRoom({
   view,
   onStart,
   onKick,
+  onAddBot,
+  onRemoveBot,
   onSettings,
   onSwitchSeat,
   onLeave,
@@ -16,6 +18,8 @@ export function WaitingRoom({
   view: RoomView;
   onStart: () => void;
   onKick: (id: string) => void;
+  onAddBot: () => void;
+  onRemoveBot: (id: string) => void;
   onSettings: (s: Partial<RoomSettings>) => void;
   onSwitchSeat: (as: "player" | "spectator") => void;
   onLeave: () => void;
@@ -23,6 +27,7 @@ export function WaitingRoom({
   const isHost = view.hostId === view.me.id;
   const [copied, setCopied] = useState(false);
   const canStart = view.players.length >= MIN_PLAYERS;
+  const full = view.players.length >= view.settings.maxPlayers;
 
   const copy = async (text: string) => {
     try {
@@ -64,11 +69,15 @@ export function WaitingRoom({
                 <span className="flex items-center gap-2">
                   <span className={`h-2 w-2 rounded-full ${p.connected ? "bg-green-400" : "bg-white/20"}`} />
                   <span className={p.id === view.me.id ? "font-bold text-amber-300" : ""}>{p.nickname}</span>
+                  {p.isBot && <span className="rounded bg-sky-800/70 px-1.5 text-xs text-sky-200">AI</span>}
                   {p.id === view.hostId && <span className="rounded bg-amber-700/60 px-1.5 text-xs">방장</span>}
                 </span>
                 {isHost && p.id !== view.me.id && (
-                  <button className="text-xs text-red-300/70 hover:text-red-200" onClick={() => onKick(p.id)}>
-                    강퇴
+                  <button
+                    className="text-xs text-red-300/70 hover:text-red-200"
+                    onClick={() => (p.isBot ? onRemoveBot(p.id) : onKick(p.id))}
+                  >
+                    {p.isBot ? "빼기" : "강퇴"}
                   </button>
                 )}
               </li>
@@ -83,8 +92,13 @@ export function WaitingRoom({
                 관전으로 전환
               </Button>
             ) : (
-              <Button variant="ghost" onClick={() => onSwitchSeat("player")} disabled={view.players.length >= view.settings.maxPlayers}>
+              <Button variant="ghost" onClick={() => onSwitchSeat("player")} disabled={full}>
                 플레이어로 참가
+              </Button>
+            )}
+            {isHost && (
+              <Button variant="ghost" onClick={onAddBot} disabled={full}>
+                AI 봇 추가
               </Button>
             )}
             {isHost && (

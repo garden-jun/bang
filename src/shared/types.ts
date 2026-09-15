@@ -15,6 +15,8 @@ export interface RoomMember {
   id: string;
   nickname: string;
   lastSeen: number;
+  /** AI 봇. 폴링하지 않으므로 접속 판정에서 제외된다 */
+  isBot?: boolean;
 }
 
 /** Redis에 저장되는 방 전체 상태. 토큰은 절대 포함하지 않는다. */
@@ -39,6 +41,7 @@ export interface MemberView {
   id: string;
   nickname: string;
   connected: boolean;
+  isBot?: boolean;
 }
 
 export interface RoomView {
