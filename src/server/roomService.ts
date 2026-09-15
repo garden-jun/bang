@@ -145,6 +145,11 @@ export async function listRooms(): Promise<RoomSummary[]> {
   return (await listPublicRooms()).map(toSummary);
 }
 
+/** 입장 전 확인용 공개 정보 (비공개 방도 코드를 알면 조회 가능) */
+export async function roomInfo(code: string): Promise<RoomSummary> {
+  return toSummary(await requireRoom(code));
+}
+
 export async function createRoom(session: Session, input: Partial<RoomSettings>): Promise<RoomView> {
   await leaveCurrentRoom(session);
   const now = Date.now();
@@ -173,13 +178,19 @@ export async function joinRoom(session: Session, code: string, as: "player" | "s
   return withRoomLock(code, async (room) => {
     const now = Date.now();
     const existing = memberOf(room, session.playerId);
-    if (existing) {
+    const seat = seatOf(room, session.playerId);
+    if (existing && (seat === as || room.status !== "waiting")) {
       existing.lastSeen = now;
       existing.nickname = session.nickname;
       tick(room, now);
       return { room, result: toRoomView(room, session, now), silent: true };
     }
-    const member: RoomMember = { id: session.playerId, nickname: session.nickname, lastSeen: now };
+    // 대기실에서 플레이어 ↔ 관전자 전환
+    if (existing) {
+      room.players = room.players.filter((p) => p.id !== existing.id);
+      room.spectators = room.spectators.filter((p) => p.id !== existing.id);
+    }
+    const member: RoomMember = existing ?? { id: session.playerId, nickname: session.nickname, lastSeen: now };
     if (as === "player") {
       if (room.status === "playing") throw new ApiError(400, "진행 중인 게임에는 관전으로만 들어갈 수 있습니다.");
       if (room.players.length >= room.settings.maxPlayers) throw new ApiError(400, "방이 가득 찼습니다.");
@@ -187,6 +198,7 @@ export async function joinRoom(session: Session, code: string, as: "player" | "s
       if (!room.players.some((p) => p.id === room.hostId)) room.hostId = member.id;
     } else {
       room.spectators.push(member);
+      if (room.hostId === member.id && room.players.length > 0) room.hostId = room.players[0].id;
     }
     await setRoomOf(session.playerId, code);
     tick(room, now);
