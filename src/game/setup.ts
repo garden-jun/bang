@@ -1,6 +1,7 @@
 import { buildDeck } from "./cards";
 import { CHARACTERS, CHARACTER_NAMES } from "./characters";
 import { log, timed } from "./core";
+import { settle } from "./engine";
 import { makeRng } from "./rng";
 import { rolesFor } from "./roles";
 import type { GameConfig, GamePlayer, GameState } from "./types";
@@ -68,5 +69,6 @@ export function createGame(
     ...timed(state, now, turnSeconds),
   };
   log(state, `게임 시작! 보안관은 ${state.names[sheriff.id]}입니다.`);
+  settle(state, now); // start → jail → draw 단계까지 자동 진행
   return state;
 }
