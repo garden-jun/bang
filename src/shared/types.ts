@@ -76,5 +76,9 @@ export const DEFAULT_SETTINGS: RoomSettings = {
   maxPlayers: 7,
 };
 
-/** 마지막 폴링 후 이 시간이 지나면 "연결 끊김" */
-export const DISCONNECT_AFTER_MS = 10_000;
+/**
+ * 마지막 폴링 후 이 시간이 지나면 "연결 끊김".
+ * 접속 시각 저장 간격(PRESENCE_WRITE_MS)보다 넉넉히 길어야 한다 — 아니면
+ * 멀쩡히 폴링 중인 사람이 끊긴 것으로 잡힌다.
+ */
+export const DISCONNECT_AFTER_MS = 30_000;

@@ -6,6 +6,24 @@ const ROOM_TTL_SEC = 60 * 60 * 6; // 6h, 활동 시 갱신
 const LOCK_TTL_MS = 3000;
 const PUBLIC_LIST = "rooms:public";
 
+/**
+ * 같은 서버 인스턴스로 몰리는 폴링을 흡수하는 초단기 캐시.
+ * 폴링 간격(2초)보다 훨씬 짧아, 최악의 경우에도 한 프레임 늦게 보일 뿐이다.
+ * 락 안에서는 절대 쓰지 않는다 — 덮어쓰기가 난다.
+ */
+const CACHE_MS = 400;
+const g = globalThis as unknown as { __bangRoomCache?: Map<string, { room: RoomState; at: number }> };
+const cache = (g.__bangRoomCache ??= new Map());
+
+function cachePut(room: RoomState): void {
+  cache.set(room.code, { room: structuredClone(room), at: Date.now() });
+  // 죽은 방이 쌓이지 않게 가끔 청소
+  if (cache.size > 200) {
+    const cutoff = Date.now() - CACHE_MS;
+    for (const [k, v] of cache) if (v.at < cutoff) cache.delete(k);
+  }
+}
+
 const roomKey = (code: string) => `room:${code}`;
 const lockKey = (code: string) => `lock:room:${code}`;
 
@@ -26,29 +44,53 @@ export async function newRoomCode(): Promise<string> {
   throw new ApiError(500, "방 코드를 만들지 못했습니다.");
 }
 
-export async function loadRoom(code: string): Promise<RoomState | null> {
+/**
+ * 방을 읽는다. 호출자가 반환값을 마음대로 고쳐도 되도록 항상 독립된 객체다.
+ * `fresh`면 캐시를 건너뛴다 (락 안에서 필수).
+ */
+export async function loadRoom(code: string, fresh = false): Promise<RoomState | null> {
   if (!isValidCode(code)) return null;
-  return getStore().get<RoomState>(roomKey(code));
+  if (!fresh) {
+    const hit = cache.get(code);
+    if (hit && Date.now() - hit.at < CACHE_MS) return structuredClone(hit.room);
+  }
+  const room = await getStore().get<RoomState>(roomKey(code));
+  if (room) cachePut(room);
+  else cache.delete(code);
+  return room;
 }
 
-export async function requireRoom(code: string): Promise<RoomState> {
-  const r = await loadRoom(code);
+export async function requireRoom(code: string, fresh = false): Promise<RoomState> {
+  const r = await loadRoom(code, fresh);
   if (!r) throw new ApiError(404, "존재하지 않는 방입니다.");
   return r;
 }
+
+const isListed = (r: RoomState) => r.settings.isPublic && r.status !== "finished";
 
 /** 저장한다 (version은 호출자가 관리). 공개 목록도 동기화. */
 export async function saveRoom(room: RoomState, now: number): Promise<RoomState> {
   room.updatedAt = now;
   const store = getStore();
+
+  // 목록 상태가 그대로면 zadd/zrem은 어차피 no-op이므로 건너뛴다 (저장마다 커맨드 1개 절약).
+  // 직전 상태를 모르면(캐시 만료) 안전하게 동기화한다.
+  const prev = cache.get(room.code)?.room;
+  const listed = isListed(room);
+  const needsSync = !prev || isListed(prev) !== listed;
+
   await store.set(roomKey(room.code), room, ROOM_TTL_SEC);
-  if (room.settings.isPublic && room.status !== "finished") await store.zadd(PUBLIC_LIST, room.createdAt, room.code);
-  else await store.zrem(PUBLIC_LIST, room.code);
+  cachePut(room);
+  if (needsSync) {
+    if (listed) await store.zadd(PUBLIC_LIST, room.createdAt, room.code);
+    else await store.zrem(PUBLIC_LIST, room.code);
+  }
   return room;
 }
 
 export async function deleteRoom(code: string): Promise<void> {
   const store = getStore();
+  cache.delete(code);
   await store.del(roomKey(code));
   await store.zrem(PUBLIC_LIST, code);
 }
@@ -94,7 +136,8 @@ export async function withRoomLock<T>(
   }
   if (!locked) throw new ApiError(409, "잠시 후 다시 시도해 주세요.");
   try {
-    const room = await requireRoom(code);
+    // 캐시를 읽으면 남의 변경을 덮어쓴다 — 락 안에서는 반드시 실제 값
+    const room = await requireRoom(code, true);
     // fn이 만드는 뷰가 저장될 버전을 갖도록 미리 올려둔다
     const base = room.version;
     room.version = base + 1;

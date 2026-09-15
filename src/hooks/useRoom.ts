@@ -47,14 +47,27 @@ export function useRoom(code: string, enabled: boolean) {
           setGone(e.status === 403 ? "notMember" : "notFound");
           return;
         }
-        delay = 3000;
+        delay = 5000;
       }
+      // 안 보고 있는 탭은 천천히. 끊긴 것으로 잡히지 않을 만큼은 유지한다
+      // (DISCONNECT_AFTER_MS 30초 > 8초 폴링 + 12초 저장 간격).
+      if (document.visibilityState === "hidden") delay = Math.max(delay, 8000);
       if (alive.current) timer.current = setTimeout(loop, delay);
     };
     void loop();
 
+    // 돌아오면 기다리지 않고 바로 최신 상태를 받는다
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && alive.current) {
+        if (timer.current) clearTimeout(timer.current);
+        void loop();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
     return () => {
       alive.current = false;
+      document.removeEventListener("visibilitychange", onVisible);
       if (timer.current) clearTimeout(timer.current);
     };
   }, [code, enabled, apply]);

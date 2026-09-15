@@ -18,8 +18,11 @@ import { ApiError } from "./api";
 import { deleteRoom, listPublicRooms, newRoomCode, requireRoom, saveRoom, withRoomLock } from "./room";
 import { getRoomOf, setRoomOf, type Session } from "./session";
 
-/** 마지막 접속 시각을 이 간격보다 자주 저장하지 않는다 (Redis 커맨드 절약) */
-const PRESENCE_WRITE_MS = 4000;
+/**
+ * 마지막 접속 시각을 이 간격보다 자주 저장하지 않는다 (Redis 커맨드 절약).
+ * 저장 한 번이 락까지 포함해 커맨드 5개라, 폴링 자체보다 이쪽이 더 비쌌다.
+ */
+const PRESENCE_WRITE_MS = 12_000;
 
 // ---------- 뷰 ----------
 
@@ -45,9 +48,10 @@ export function toRoomView(room: RoomState, session: Session, now: number): Room
       )
     : undefined;
 
-  let pollMs = 2000;
+  // 지금 행동할 사람만 빠르게 본다. 나머지는 느려도 체감 차이가 없다.
+  let pollMs = 3000;
   if (room.status === "playing" && game) {
-    pollMs = game.responder === session.playerId ? 700 : 1000;
+    pollMs = game.responder === session.playerId ? 1000 : 2000;
   }
 
   return {

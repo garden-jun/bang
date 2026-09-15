@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button, ErrorBanner, Input, NicknameForm, Panel } from "@/components/ui";
 import { useSession } from "@/hooks/useSession";
 import { api } from "@/lib/api";
@@ -17,16 +17,30 @@ export default function LobbyPage() {
   const [settings, setSettings] = useState<RoomSettings>(DEFAULT_SETTINGS);
   const [code, setCode] = useState("");
 
-  useEffect(() => {
-    let alive = true;
-    const load = () => api.listRooms().then((r) => alive && setRooms(r)).catch(() => {});
-    load();
-    const t = setInterval(load, 5000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
+  // 로비를 켜둔 채 방치하는 탭이 흔해서, 짧은 주기로 돌리면 그것만으로 무료 티어가 녹는다.
+  // 30초 주기 + 탭이 숨겨져 있으면 정지, 필요하면 수동 새로고침.
+  const loadRooms = useCallback(async () => {
+    try {
+      setRooms(await api.listRooms());
+    } catch {
+      /* 목록은 실패해도 조용히 둔다 */
+    }
   }, []);
+
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState === "visible") void loadRooms();
+    };
+    // 마운트 후 비동기로 첫 로드 (렌더 중 동기 setState 방지)
+    const first = setTimeout(tick, 0);
+    const t = setInterval(tick, 30_000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearTimeout(first);
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [loadRooms]);
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -177,7 +191,16 @@ export default function LobbyPage() {
             </Panel>
           </div>
 
-          <Panel title="공개 방">
+          <Panel
+            title={
+              <span className="flex items-center justify-between">
+                공개 방
+                <button className="font-normal normal-case text-white/50 underline hover:text-white" onClick={() => void loadRooms()}>
+                  새로고침
+                </button>
+              </span>
+            }
+          >
             {rooms.length === 0 ? (
               <p className="text-sm text-white/40">열린 방이 없습니다. 하나 만들어 보세요!</p>
             ) : (

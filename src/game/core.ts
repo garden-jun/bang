@@ -94,7 +94,8 @@ export function countsAs(p: GamePlayer, c: Card, as: "bang" | "missed"): boolean
 
 export function log(state: GameState, msg: string): void {
   state.log.push({ t: state.log.length, msg });
-  if (state.log.length > 150) state.log.splice(0, state.log.length - 150);
+  // 뷰는 최근 60줄만 쓴다. 방 전체가 매 폴링마다 오가므로 상한이 곧 대역폭이다.
+  if (state.log.length > 80) state.log.splice(0, state.log.length - 80);
 }
 
 // ---------- 덱 ----------
