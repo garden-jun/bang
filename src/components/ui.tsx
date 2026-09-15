@@ -48,28 +48,33 @@ export function ErrorBanner({ message, onClose }: { message: string | null; onCl
   );
 }
 
-export function NicknameForm({
-  initial,
-  onSubmit,
-  busy,
+/**
+ * 닉네임 입력칸. 별도 화면이나 제출 버튼 없이 필요한 자리에 그냥 놓는다 —
+ * 세션은 방을 만들거나 입장할 때 이 값으로 만들어진다.
+ */
+export function NicknameField({
+  value,
+  onChange,
+  disabled,
+  className = "",
 }: {
-  initial: string;
-  onSubmit: (nickname: string) => void;
-  busy?: boolean;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+  className?: string;
 }) {
   return (
-    <form
-      className="flex gap-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const v = new FormData(e.currentTarget).get("nickname");
-        if (typeof v === "string" && v.trim()) onSubmit(v.trim());
-      }}
-    >
-      <Input name="nickname" defaultValue={initial} maxLength={12} placeholder="닉네임 (1~12자)" autoFocus className="flex-1" />
-      <Button type="submit" disabled={busy}>
-        입장
-      </Button>
-    </form>
+    <label className={`flex items-center gap-2 text-sm ${className}`}>
+      <span className="shrink-0 text-white/60">닉네임</span>
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={12}
+        disabled={disabled}
+        placeholder="1~12자"
+        aria-label="닉네임"
+        className="w-40"
+      />
+    </label>
   );
 }
