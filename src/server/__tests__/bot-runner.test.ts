@@ -13,6 +13,7 @@ const g = globalThis as unknown as { __bangStore?: Store; __bangRoomCache?: Map<
 
 beforeEach(() => {
   delete process.env.OPENAI_API_KEY;
+  process.env.BOT_MIN_MOVE_MS = "0"; // 사람이 보라고 넣은 지연 — 테스트에서는 끈다
   process.env.SESSION_SECRET = "test-secret";
   g.__bangStore = undefined; // 인메모리 스토어로 새로 시작
   g.__bangRoomCache?.clear();

@@ -1,5 +1,6 @@
 import { ApiError, handle, readJson } from "@/server/api";
-import { createSession, getRoomOf, getSession, normalizeNickname, renameSession } from "@/server/session";
+import { createSession, getSession, normalizeNickname, renameSession } from "@/server/session";
+import { currentRoomOf } from "@/server/roomService";
 import type { SessionInfo } from "@/shared/types";
 
 /** 세션 조회 (복귀용). 토큰이 없거나 만료면 401 */
@@ -7,7 +8,7 @@ export async function GET(req: Request) {
   return handle(async () => {
     const s = await getSession(req.headers.get("x-player-token"));
     if (!s) throw new ApiError(401, "세션 없음");
-    const roomCode = (await getRoomOf(s.playerId)) ?? undefined;
+    const roomCode = (await currentRoomOf(s)) ?? undefined;
     const info: SessionInfo = { playerId: s.playerId, nickname: s.nickname, roomCode };
     return Response.json(info);
   });

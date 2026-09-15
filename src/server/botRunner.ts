@@ -11,6 +11,16 @@ import { loadRoom, withRoomLock } from "./room";
 const MAX_MOVES = 24;
 
 /**
+ * 봇의 한 수가 최소 이만큼은 걸리게 한다.
+ *
+ * 안 그러면 봇 여럿의 턴이 폴링 한 번 사이에 전부 끝나서, 사람은 결과만
+ * 보고 무슨 일이 있었는지 못 본다. LLM이 이미 시간을 썼으면 그만큼 덜 쉰다.
+ *
+ * BOT_MIN_MOVE_MS로 조절한다 (0이면 즉시 — 테스트용).
+ */
+const MIN_MOVE_MS = Number(process.env.BOT_MIN_MOVE_MS ?? 1100);
+
+/**
  * 지금 행동해야 할 사람이 봇이면 대신 둔다. 연속된 봇 차례는 이어서 처리한다.
  *
  * 응답을 붙잡지 않도록 라우트에서 `after()`로 부른다. Vercel에는 상주
@@ -18,6 +28,7 @@ const MAX_MOVES = 24;
  */
 export async function runBots(code: string): Promise<void> {
   for (let i = 0; i < MAX_MOVES; i++) {
+    const startedAt = Date.now();
     const room = await loadRoom(code, true);
     if (!room?.game || room.status !== "playing" || room.game.winner) return;
 
@@ -55,6 +66,9 @@ export async function runBots(code: string): Promise<void> {
     }).catch(() => false);
 
     if (!applied) return;
+
+    const spent = Date.now() - startedAt;
+    if (spent < MIN_MOVE_MS) await new Promise((r) => setTimeout(r, MIN_MOVE_MS - spent));
   }
 }
 

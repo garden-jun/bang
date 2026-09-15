@@ -16,7 +16,7 @@ import {
   type RoomView,
 } from "@/shared/types";
 import { ApiError } from "./api";
-import { deleteRoom, listPublicRooms, newRoomCode, requireRoom, saveRoom, withRoomLock } from "./room";
+import { deleteRoom, listPublicRooms, loadRoom, newRoomCode, requireRoom, saveRoom, withRoomLock } from "./room";
 import { getRoomOf, setRoomOf, type Session } from "./session";
 
 /**
@@ -58,9 +58,12 @@ export function toRoomView(room: RoomState, session: Session, now: number): Room
     : undefined;
 
   // 지금 행동할 사람만 빠르게 본다. 나머지는 느려도 체감 차이가 없다.
+  // 단, 봇 차례에는 사람이 구경만 하므로 봇이 두는 속도(MIN_MOVE_MS)에 맞춘다 —
+  // 더 느리면 여러 수가 한 번에 몰려 와서 무슨 일이 있었는지 못 본다.
   let pollMs = 3000;
   if (room.status === "playing" && game) {
-    pollMs = game.responder === session.playerId ? 1000 : 2000;
+    if (game.responder === session.playerId) pollMs = 1000;
+    else pollMs = room.players.find((p) => p.id === game.responder)?.isBot ? 1200 : 2000;
   }
 
   return {
@@ -158,6 +161,18 @@ export async function listRooms(): Promise<RoomSummary[]> {
   return (await listPublicRooms()).map(toSummary);
 }
 
+/**
+ * 이 플레이어가 복귀할 방. 가리키는 방이 이미 없으면 포인터를 지우고 null.
+ * (방 TTL 6시간 < 포인터 TTL 24시간이라 죽은 포인터가 남을 수 있다)
+ */
+export async function currentRoomOf(session: Session): Promise<string | null> {
+  const code = await getRoomOf(session.playerId);
+  if (!code) return null;
+  if (await loadRoom(code)) return code;
+  await setRoomOf(session.playerId, null);
+  return null;
+}
+
 /** 입장 전 확인용 공개 정보 (비공개 방도 코드를 알면 조회 가능) */
 export async function roomInfo(code: string): Promise<RoomSummary> {
   return toSummary(await requireRoom(code));
@@ -221,27 +236,33 @@ export async function joinRoom(session: Session, code: string, as: "player" | "s
 
 export async function leaveRoom(session: Session, code: string): Promise<void> {
   let empty = false;
-  await withRoomLock(code, async (room) => {
-    const now = Date.now();
-    const id = session.playerId;
-    const wasPlayer = room.players.some((p) => p.id === id);
+  // 방이 이미 사라졌어도(TTL 만료 등) 참여 포인터는 반드시 지운다.
+  // 안 지우면 로비가 "참여 중인 방이 있습니다"를 계속 띄우고,
+  // 복귀하면 "없는 방"이 나오는 무한 반복이 된다.
+  try {
+    await withRoomLock(code, async (room) => {
+      const now = Date.now();
+      const id = session.playerId;
+      const wasPlayer = room.players.some((p) => p.id === id);
 
-    if (wasPlayer && room.status === "playing" && room.game) {
-      room.game = forfeit(room.game, id, now);
-    }
-    room.players = room.players.filter((p) => p.id !== id);
-    room.spectators = room.spectators.filter((p) => p.id !== id);
+      if (wasPlayer && room.status === "playing" && room.game) {
+        room.game = forfeit(room.game, id, now);
+      }
+      room.players = room.players.filter((p) => p.id !== id);
+      room.spectators = room.spectators.filter((p) => p.id !== id);
 
-    if (room.hostId === id) {
-      room.hostId = room.players[0]?.id ?? room.spectators[0]?.id ?? "";
-    }
-    tick(room, now);
-    // 봇만 남은 방은 아무도 폴링하지 않아 그대로 방치된다 — 같이 닫는다
-    const humans = [...room.players, ...room.spectators].filter((m) => !m.isBot);
-    empty = humans.length === 0;
-    return { room: empty ? null : room, result: undefined };
-  });
-  await setRoomOf(session.playerId, null);
+      if (room.hostId === id) {
+        room.hostId = room.players[0]?.id ?? room.spectators[0]?.id ?? "";
+      }
+      tick(room, now);
+      // 봇만 남은 방은 아무도 폴링하지 않아 그대로 방치된다 — 같이 닫는다
+      const humans = [...room.players, ...room.spectators].filter((m) => !m.isBot);
+      empty = humans.length === 0;
+      return { room: empty ? null : room, result: undefined };
+    });
+  } finally {
+    await setRoomOf(session.playerId, null);
+  }
   if (empty) await deleteRoom(code);
 }
 

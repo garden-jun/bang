@@ -2,75 +2,110 @@
 
 import { CHARACTER_KO, ROLE_KO } from "@/game/i18n";
 import type { PlayerView } from "@/game/view";
+import type { SeatEffect } from "@/hooks/useGameEvents";
 import { CardBack, CardFace } from "./CardFace";
 
 export function Seat({
   player,
   name,
   isMe,
-  isTurn,
-  isResponder,
+  isActive,
   connected,
+  isBot,
+  distance,
+  inRange,
   targetable,
+  effect,
   onTarget,
 }: {
   player: PlayerView;
   name: string;
   isMe: boolean;
-  isTurn: boolean;
-  isResponder: boolean;
+  /** 지금 이 사람이 행동/응답할 차례 */
+  isActive: boolean;
   connected: boolean;
+  isBot?: boolean;
+  /** 나로부터의 거리 (나 자신이면 undefined) */
+  distance?: number;
+  /** 내 무기 사거리 안 — 조준 중이 아니어도 항상 보여준다 */
+  inRange?: boolean;
+  /** 지금 고른 카드의 대상이 될 수 있음 */
   targetable: boolean;
+  effect?: SeatEffect;
   onTarget?: () => void;
 }) {
   const ch = CHARACTER_KO[player.character];
+  const dead = !player.alive;
+
+  const anim =
+    effect?.kind === "hit" ? "anim-hit anim-flash-hit" : effect?.kind === "heal" ? "anim-flash-heal" : effect?.kind === "death" ? "anim-death" : "";
+
   const ring = targetable
-    ? "cursor-pointer ring-2 ring-red-500 hover:bg-red-900/30"
-    : isTurn
-      ? "ring-2 ring-amber-400"
-      : isResponder
-        ? "ring-2 ring-sky-400"
-        : "ring-1 ring-white/10";
+    ? "ring-2 ring-red-500 bg-red-950/40 cursor-pointer hover:bg-red-900/50 hover:scale-[1.03]"
+    : isActive
+      ? "anim-active bg-black/50"
+      : "ring-1 ring-white/10 bg-black/40";
+
+  // 사거리 밖은 흐리게 — "누굴 쏠 수 있나"가 카드를 들기 전에 보여야 한다
+  const reach = dead || isMe || inRange === undefined ? "" : inRange ? "" : "opacity-45";
 
   return (
     <div
+      key={effect?.key}
       onClick={targetable ? onTarget : undefined}
-      className={`rounded-lg bg-black/30 p-2 text-xs transition ${ring} ${player.alive ? "" : "opacity-40 grayscale"}`}
+      className={`${anim} ${ring} ${reach} ${dead ? "grayscale" : ""} w-full rounded-xl border border-white/10 p-1.5 text-[9px]
+        backdrop-blur-sm transition sm:p-2 sm:text-[11px]`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1 truncate font-bold">
-          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connected ? "bg-green-400" : "bg-white/30"}`} />
-          <span className={isMe ? "text-amber-300" : ""}>{name}</span>
-        </span>
+      <div className="flex items-center gap-1">
+        {!isBot && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connected ? "bg-green-400" : "bg-white/25"}`} />}
+        {isBot && <span className="shrink-0 rounded bg-sky-800/80 px-1 text-[8px] font-bold text-sky-200">AI</span>}
+        <span className={`truncate font-bold ${isMe ? "text-amber-300" : ""}`}>{name}</span>
         {player.role && (
-          <span className={`shrink-0 rounded px-1 ${player.role === "sheriff" ? "bg-amber-600 text-black" : "bg-white/15"}`}>
+          <span
+            className={`ml-auto shrink-0 rounded px-1 text-[9px] font-bold ${
+              player.role === "sheriff" ? "bg-amber-500 text-black" : "bg-white/15 text-white/80"
+            }`}
+          >
             {ROLE_KO[player.role]}
           </span>
         )}
+        {!player.role && distance !== undefined && !dead && (
+          <span
+            className={`ml-auto shrink-0 rounded px-1 text-[9px] font-mono ${inRange ? "bg-amber-500/25 text-amber-200" : "bg-white/10 text-white/40"}`}
+            title={`거리 ${distance}${inRange ? " — 사거리 안" : " — 사거리 밖"}`}
+          >
+            {distance}
+          </span>
+        )}
       </div>
-      <div className="mt-1 truncate text-white/70" title={ch.desc}>
+
+      <div className="mt-0.5 truncate text-white/55" title={ch.desc}>
         {ch.name}
       </div>
+
       <div className="mt-1 flex items-center gap-1">
-        <span className="text-red-400" aria-label={`생명 ${player.hp}/${player.maxHp}`}>
-          {"♥".repeat(Math.max(0, player.hp))}
-          <span className="text-white/20">{"♥".repeat(Math.max(0, player.maxHp - player.hp))}</span>
+        <span className="tracking-tighter" aria-label={`생명 ${player.hp}/${player.maxHp}`}>
+          <span className="text-red-500">{"♥".repeat(Math.max(0, player.hp))}</span>
+          <span className="text-white/15">{"♥".repeat(Math.max(0, player.maxHp - player.hp))}</span>
         </span>
-        <span className="ml-auto flex items-center gap-1 text-white/60">
-          <CardBack size="sm" count={player.handCount} />
+        <span className="ml-auto flex items-center gap-0.5 text-white/50">
+          <CardBack size="xs" count={player.handCount} />
         </span>
       </div>
+
       {player.equipment.length > 0 && (
-        <div className="mt-1 flex flex-wrap gap-1">
+        <div className="mt-1 flex flex-wrap gap-0.5">
           {player.equipment.map((c) => (
-            <CardFace key={c.id} card={c} size="sm" />
+            <CardFace key={c.id} card={c} size="xs" />
           ))}
         </div>
       )}
+
+      {/* 전체 공개 관전 */}
       {player.hand && !isMe && (
-        <div className="mt-1 flex flex-wrap gap-1 border-t border-white/10 pt-1">
+        <div className="mt-1 flex flex-wrap gap-0.5 border-t border-white/10 pt-1">
           {player.hand.map((c) => (
-            <CardFace key={c.id} card={c} size="sm" />
+            <CardFace key={c.id} card={c} size="xs" />
           ))}
         </div>
       )}

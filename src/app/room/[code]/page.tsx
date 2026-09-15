@@ -118,9 +118,12 @@ export default function RoomPage() {
   const view = room.view;
   if (!view) return <Center>방에 연결하는 중…</Center>;
 
+  // 게임판은 페이지가 아니라 화면이다 — 스크롤 없이 한 화면에 들어와야 한다
+  const playing = view.status === "playing" && !!view.game;
+
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-4">
-      <div className="mb-3">
+    <main className={`mx-auto w-full px-2 sm:px-4 ${playing ? "max-w-7xl py-2" : "max-w-6xl py-4"}`}>
+      <div className={room.error ? "mb-2" : ""}>
         <ErrorBanner message={room.error} onClose={room.clearError} />
       </div>
       {view.status === "waiting" && (
@@ -135,7 +138,7 @@ export default function RoomPage() {
           onLeave={leave}
         />
       )}
-      {view.status === "playing" && view.game && <GameBoard view={view} act={room.act} onLeave={leave} />}
+      {playing && <GameBoard view={view} act={room.act} onLeave={leave} />}
       {view.status === "finished" && view.game && <ResultScreen view={view} onReset={room.reset} onLeave={leave} />}
     </main>
   );
