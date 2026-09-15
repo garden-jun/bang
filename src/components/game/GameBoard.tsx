@@ -189,7 +189,7 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
                 <span>· 손패 {me.hand?.length ?? 0}</span>
                 {!me.alive && <span className="text-red-300">· 사망</span>}
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2" data-testid="hand">
                 {(me.hand ?? []).map((c) => (
                   <CardFace
                     key={c.id}

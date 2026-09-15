@@ -388,7 +388,18 @@ src/
 
 ---
 
-## 9. 추가 결정
+## 9. 구현하면서 달라진 점
+
+- `log`는 `RoomState`가 아니라 `GameState` 안에 두고, 엔진이 닉네임 맵(`names`)을 받아 한글 문장으로 바로 기록
+- 턴 phase에 `jail` 추가 (`start`=다이너마이트 판정 → `jail`=감옥 판정 → `draw`), 죽기 직전 대기 후 이어서 진행하기 위함
+- `chooseCard`/`jesseJones` pending 제거: 패닉!/캣 발루는 `play` 액션에 `targetCardId`(장착 카드 id 또는 `"hand"`)를 함께 보내고, 제시 존스/페드로는 `draw` 액션의 `source`로 선택
+- Barrel은 자동 판정 (`useBarrel` 액션 없음)
+- 대응 마감은 `reactionSeconds = max(15, turnSeconds/2)`
+- 엔드포인트 추가: `GET /api/rooms/:code/info` (입장 전 확인), `POST /api/rooms/:code/reset` (결과 → 대기실)
+- 버전 관리: 락 안에서 미리 `version+1` 해서 응답 뷰와 저장본이 같은 버전을 갖게 함. 접속 시각만 갱신할 땐 버전 유지
+- 좌석 순서는 매 판 시작 시 재셔플
+
+## 10. 추가 결정
 
 - 카드/캐릭터 이름 **한글 표기** (코드 내부 식별자는 영문, 표시명은 `lib/i18n.ts`에서 매핑)
 - 카드 비주얼은 텍스트 + 아이콘으로 **자체 제작** (원작 이미지 미사용)
