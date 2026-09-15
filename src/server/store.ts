@@ -60,11 +60,17 @@ class MemoryStore implements Store {
     }
     return e;
   }
+  // 실제 Upstash는 요청마다 새 JSON을 돌려준다. 참조를 그대로 주면 호출자들이
+  // 같은 객체를 공유해, 한쪽의 수정이 다른 쪽에 새어 들어간다.
   async get<T>(key: string) {
-    return (this.live(key)?.value as T) ?? null;
+    const v = this.live(key)?.value;
+    return v === undefined ? null : (structuredClone(v) as T);
   }
   async mget<T>(keys: string[]) {
-    return keys.map((k) => (this.live(k)?.value as T) ?? null);
+    return keys.map((k) => {
+      const v = this.live(k)?.value;
+      return v === undefined ? null : (structuredClone(v) as T);
+    });
   }
   async set(key: string, value: unknown, ttlSec?: number) {
     this.kv.set(key, { value: structuredClone(value), expires: ttlSec ? Date.now() + ttlSec * 1000 : undefined });
