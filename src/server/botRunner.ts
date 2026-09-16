@@ -22,7 +22,7 @@ const MIN_MOVE_MS = Number(process.env.BOT_MIN_MOVE_MS ?? 1650);
  * 상태가 바뀐 뒤 화면에 도착하기까지의 여유. 봇 차례에 구경하는 사람의 폴링 간격이
  * 1.8초(toRoomView의 pollMs)라 평균 0.9초쯤 늦게 받는다.
  */
-const ARRIVAL_MS = 1000;
+const ARRIVAL_MS = 700;
 
 /**
  * 방금 생긴 로그 줄의 연출이 화면에서 다 끝날 때까지 봇을 붙잡는다.
