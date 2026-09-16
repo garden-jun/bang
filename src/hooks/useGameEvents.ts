@@ -19,6 +19,14 @@ export interface SeatEffect {
 const STEP_MS = 1350;
 /** 밀린 사건이 많으면 더 빨리 흘린다 (봇이 연달아 둘 때) */
 const MIN_STEP_MS = 630;
+/**
+ * 내가 행동할 차례인데 아직 지난 장면을 재생 중일 때 쓰는 간격.
+ *
+ * 화면판과 프롬프트는 최신 상태를 바로 반영하는데 연출 큐만 뒤처지면,
+ * "봇 턴이 안 끝났는데 내가 조작할 수 있는" 상태로 보인다. 밀린 것은 빠르게
+ * 흘려보내고 마지막 한 장면(= 나에게 벌어진 일)만 제 속도로 보여준다.
+ */
+const CATCH_UP_MS = 180;
 
 /** 테이블 위에 그릴 화살표 — 공격자에서 대상(들)로 */
 export interface ArrowEvent {
@@ -50,12 +58,17 @@ export function useGameEvents(view: RoomView | null) {
   const prevHp = useRef<Map<string, number>>(new Map());
   const prevAlive = useRef<Map<string, boolean>>(new Map());
   const queue = useRef<Beat[]>([]);
+  /** pump가 setTimeout으로 스스로를 다시 걸기 때문에 최신 값을 ref로 읽는다 */
+  const iActNow = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const effectKey = useRef(0);
 
   const game: GameView | undefined = view?.game;
 
   useEffect(() => {
+    // 렌더 중에 ref를 쓰면 안 되므로(react-hooks/refs) 이펙트에서 갱신한다.
+    // pump는 setTimeout으로 스스로를 다시 걸기 때문에 옛 클로저도 이 최신 값을 읽는다.
+    iActNow.current = !!game && !game.winner && !!view && game.responder === view.me.id;
     if (!game) return;
 
     // 생명/사망은 로그보다 확실하다 — 원인이 무엇이든 결과가 남는다
@@ -118,11 +131,15 @@ export function useGameEvents(view: RoomView | null) {
       // 여기서 지우면 뒤따르는 "피해 1" 사건이 0.9초 만에 선을 끊어 버린다.
       if (next.arrow) setArrow(next.arrow);
       if (next.effects) setSeat((s) => ({ ...s, ...next.effects }));
-      // 밀린 게 많으면 간격을 줄여 따라잡는다
-      const step = Math.max(MIN_STEP_MS, STEP_MS - queue.current.length * 180);
+      // 내 차례인데 밀린 장면이 남아 있으면 빠르게 따라잡는다. 큐가 비면(=지금 보여준 게
+      // 마지막 장면) 평소 속도로 돌아가, 나에게 벌어진 일은 놓치지 않는다.
+      const step =
+        iActNow.current && queue.current.length > 0
+          ? CATCH_UP_MS
+          : Math.max(MIN_STEP_MS, STEP_MS - queue.current.length * 180);
       timer.current = setTimeout(pump, step);
     }
-  }, [game]);
+  }, [game, view]);
 
   useEffect(
     () => () => {

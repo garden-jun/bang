@@ -98,6 +98,16 @@ function memberOf(room: RoomState, id: string): RoomMember | undefined {
   return room.players.find((p) => p.id === id) ?? room.spectators.find((p) => p.id === id);
 }
 
+/**
+ * 다음 방장. 봇은 시작·설정·강퇴를 할 수 없으므로 절대 방장이 되면 안 된다 —
+ * 봇이 방장이 되면 아무도 게임을 시작할 수 없는 방이 된다.
+ * 자리에 앉은 사람을 먼저, 없으면 관전자를 고른다.
+ */
+function nextHost(room: RoomState, excludeId?: string): string | undefined {
+  const human = (m: RoomMember) => !m.isBot && m.id !== excludeId;
+  return (room.players.find(human) ?? room.spectators.find(human))?.id;
+}
+
 function requireHost(room: RoomState, session: Session): void {
   if (room.hostId !== session.playerId) throw new ApiError(403, "방장만 할 수 있습니다.");
 }
@@ -226,7 +236,8 @@ export async function joinRoom(session: Session, code: string, as: "player" | "s
       if (!room.players.some((p) => p.id === room.hostId)) room.hostId = member.id;
     } else {
       room.spectators.push(member);
-      if (room.hostId === member.id && room.players.length > 0) room.hostId = room.players[0].id;
+      // 관전으로 내려가도 방장은 그대로 둔다. 예전엔 players[0]에게 넘겼는데
+      // 그게 봇이면 아무도 시작할 수 없는 방이 됐다 (방 만들기 → 봇 추가 → 관전).
     }
     await setRoomOf(session.playerId, code);
     tick(room, now);
@@ -252,7 +263,7 @@ export async function leaveRoom(session: Session, code: string): Promise<void> {
       room.spectators = room.spectators.filter((p) => p.id !== id);
 
       if (room.hostId === id) {
-        room.hostId = room.players[0]?.id ?? room.spectators[0]?.id ?? "";
+        room.hostId = nextHost(room) ?? "";
       }
       tick(room, now);
       // 봇만 남은 방은 아무도 폴링하지 않아 그대로 방치된다 — 같이 닫는다
@@ -360,7 +371,17 @@ export async function kickPlayer(session: Session, code: string, targetId: strin
   });
 }
 
-const BOT_NAMES = ["빌리", "제이크", "한스", "몰리", "듀크", "사샤", "에드", "로지"];
+/**
+ * 봇 이름은 AI1, AI2… 사람 닉네임처럼 보이는 이름을 주면 누가 봇인지 헷갈린다.
+ * 빠진 번호가 있으면 다시 채운다 (봇을 뺐다 넣어도 번호가 치솟지 않게).
+ */
+function nextBotName(room: RoomState): string {
+  const taken = new Set(room.players.map((p) => p.nickname));
+  for (let i = 1; ; i++) {
+    const name = `AI${i}`;
+    if (!taken.has(name)) return name;
+  }
+}
 
 /** 방장이 AI 봇을 자리에 앉힌다 */
 export async function addBot(session: Session, code: string): Promise<RoomView> {
@@ -369,10 +390,8 @@ export async function addBot(session: Session, code: string): Promise<RoomView> 
     if (room.status !== "waiting") throw new ApiError(400, "대기실에서만 봇을 추가할 수 있습니다.");
     if (room.players.length >= room.settings.maxPlayers) throw new ApiError(400, "자리가 가득 찼습니다.");
 
-    const taken = new Set(room.players.map((p) => p.nickname));
-    const base = BOT_NAMES.find((n) => !taken.has(n)) ?? `봇${room.players.length}`;
     const now = Date.now();
-    room.players.push({ id: `bot:${randomUUID()}`, nickname: base, lastSeen: now, isBot: true });
+    room.players.push({ id: `bot:${randomUUID()}`, nickname: nextBotName(room), lastSeen: now, isBot: true });
     tick(room, now, session.playerId);
     return { room, result: toRoomView(room, session, now) };
   });
