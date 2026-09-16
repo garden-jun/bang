@@ -17,6 +17,7 @@ export function Seat({
   targetable,
   effect,
   onTarget,
+  onHover,
 }: {
   player: PlayerView;
   name: string;
@@ -33,6 +34,8 @@ export function Seat({
   targetable: boolean;
   effect?: SeatEffect;
   onTarget?: () => void;
+  /** 도움말: 마우스를 올리면 설명 줄에 이 좌석 설명을 띄운다 */
+  onHover?: (on: boolean) => void;
 }) {
   const ch = CHARACTER_KO[player.character];
   const dead = !player.alive;
@@ -53,6 +56,8 @@ export function Seat({
     <div
       key={effect?.key}
       onClick={targetable ? onTarget : undefined}
+      onMouseEnter={onHover ? () => onHover(true) : undefined}
+      onMouseLeave={onHover ? () => onHover(false) : undefined}
       className={`${anim} ${ring} ${reach} ${dead ? "grayscale" : ""} w-full rounded-xl border border-white/10 p-1.5 text-[9px]
         backdrop-blur-sm transition sm:p-2 sm:text-[11px]`}
     >

@@ -2,19 +2,34 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui";
-import { WEAPON_RANGE, isWeapon } from "@/game/cards";
+import { describeSituation, explainCard, explainRole, explainSeat, type HelpText } from "@/game/help";
 import { CARD_KO, CHARACTER_KO, ROLE_KO, cardLabel } from "@/game/i18n";
 import type { Action, Card, CardName } from "@/game/types";
 import type { GameView, PlayerView } from "@/game/view";
+import { playReason, targetReason, viewDistance, weaponRange } from "@/game/viewRules";
 import { useGameEvents } from "@/hooks/useGameEvents";
 import type { RoomView } from "@/shared/types";
 import { CardBack, CardFace } from "./CardFace";
+import { HelpSheet } from "./HelpSheet";
+import { HelpStrip } from "./HelpStrip";
 import { LogFeed } from "./LogFeed";
 import { Seat } from "./Seat";
 import { Table } from "./Table";
 
 const NEEDS_TARGET: ReadonlySet<CardName> = new Set(["bang", "missed", "panic", "catBalou", "duel", "jail"]);
 const NEEDS_TARGET_CARD: ReadonlySet<CardName> = new Set(["panic", "catBalou"]);
+
+const HELP_KEY = "bang.help";
+
+function readHelpOn(): boolean {
+  try {
+    return localStorage.getItem(HELP_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+type HelpFocus = { kind: "card"; card: Card } | { kind: "seat"; player: PlayerView } | { kind: "role"; role: NonNullable<PlayerView["role"]> };
 
 type Mode =
   | { kind: "idle" }
@@ -35,6 +50,26 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
   const [hovered, setHovered] = useState<Card | null>(null);
   const [busy, setBusy] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+
+  // ---------- 도움말 ----------
+  // 이 컴포넌트는 폴링 결과가 온 뒤 클라이언트에서만 붙으므로 초기값에서 브라우저를 읽어도 된다
+  const [helpOn, setHelpOn] = useState(() => readHelpOn());
+  const [isTouch] = useState(() => typeof window !== "undefined" && window.matchMedia("(hover: none)").matches);
+  // 판이 시작될 때(이 컴포넌트가 붙을 때) 한 번: 내 역할과 규칙
+  const [sheet, setSheet] = useState<"intro" | "open" | null>(() => (isPlayer && readHelpOn() ? "intro" : null));
+  /** 힌트 줄에 설명할 대상 */
+  const [focus, setFocus] = useState<HelpFocus | null>(null);
+  const toggleHelp = () => {
+    setHelpOn((v) => {
+      try {
+        localStorage.setItem(HELP_KEY, v ? "off" : "on");
+      } catch {
+        /* noop */
+      }
+      return !v;
+    });
+    setFocus(null);
+  };
 
   const events = useGameEvents(view);
 
@@ -75,46 +110,18 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
   const canPlayNow = isPlayer && myTurn && game.turn.phase === "play" && !top && !busy;
   const myRange = me ? weaponRange(me) : 1;
 
-  /** 이 카드를 낼 수 있나 — 낼 수 없는 이유가 보이도록 손패에서 흐리게 처리한다 */
-  const playable = (c: Card): boolean => {
-    if (!canPlayNow || !me) return false;
-    switch (c.name) {
-      case "missed":
-        return me.character === "calamityJanet" && hasAnyTarget(c);
-      case "bang":
-        return (game.turn.bangsPlayed < 1 || unlimitedBang(me)) && hasAnyTarget(c);
-      case "beer":
-        return game.players.filter((p) => p.alive).length > 2 && me.hp < me.maxHp;
-      case "panic":
-      case "catBalou":
-      case "duel":
-      case "jail":
-        return hasAnyTarget(c);
-      case "saloon":
-        return game.players.some((p) => p.alive && p.hp < p.maxHp);
-      default:
-        if (isEquip(c.name)) return !me.equipment.some((e) => e.name === c.name);
-        return true;
-    }
-  };
-
-  function hasAnyTarget(c: Card): boolean {
-    return game.players.some((p) => canTarget(c, p));
-  }
+  /** 이 카드를 낼 수 있나 — 낼 수 없는 이유가 보이도록 손패에서 흐리게 처리한다 (이유는 힌트 줄에) */
+  const playable = (c: Card): boolean => !!me && playReason(game, me, c, canPlayNow) === null;
 
   /** 카드 c로 p를 칠 수 있나 */
-  function canTarget(c: Card, p: PlayerView): boolean {
-    if (!p.alive || p.id === meId || !me) return false;
-    const n = c.name;
-    if (n === "jail") return p.role !== "sheriff" && !p.equipment.some((e) => e.name === "jail");
-    const d = viewDistance(game, meId, p.id);
-    if (n === "bang" || n === "missed") return d <= myRange;
-    if (n === "panic") return d <= 1 && (p.handCount > 0 || p.equipment.length > 0);
-    if (n === "catBalou") return p.handCount > 0 || p.equipment.length > 0;
-    return true;
-  }
+  const canTarget = (c: Card, p: PlayerView): boolean => !!me && targetReason(game, me, c, p) === null;
 
   const onHandClick = (card: Card) => {
+    // 모바일 + 도움말: 첫 탭은 설명, 같은 카드를 한 번 더 탭하면 사용
+    if (helpOn && isTouch && mode.kind !== "multi" && !(focus?.kind === "card" && focus.card.id === card.id)) {
+      setFocus({ kind: "card", card });
+      return;
+    }
     if (mode.kind === "multi") {
       const ids = mode.ids.includes(card.id) ? mode.ids.filter((i) => i !== card.id) : [...mode.ids, card.id];
       setMode({ ...mode, ids });
@@ -143,6 +150,17 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
     return canTarget(aimCard, p);
   };
 
+  const help: HelpText | null = !helpOn
+    ? null
+    : focus?.kind === "card"
+      ? explainCard(game, me, focus.card, canPlayNow)
+      : focus?.kind === "seat"
+        ? explainSeat(game, me, focus.player)
+        : focus?.kind === "role"
+          ? explainRole(focus.role)
+          : null;
+  const helpHint = isTouch ? "카드나 자리를 한 번 탭하면 설명, 한 번 더 탭하면 사용" : "카드나 자리에 마우스를 올리면 설명이 나옵니다";
+
   const prompt = isPlayer && me ? buildPrompt(game, me, iRespond, myTurn, mode, setMode, send, busy) : null;
   const urgent = iRespond || (myTurn && !top);
   const activeName = game.names[game.responder] ?? "";
@@ -161,7 +179,22 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
             {PENDING_KO[top.kind]} · {activeName} 대기
           </span>
         )}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <button
+            className={`rounded border px-2 py-1 text-xs ${helpOn ? "border-amber-500/50 bg-amber-900/30 text-amber-200" : "border-white/15 text-white/50"} hover:bg-white/10`}
+            onClick={toggleHelp}
+            title="초보자 도움말 켜기/끄기"
+          >
+            도움말
+          </button>
+          <button
+            className="rounded border border-white/15 px-2 py-1 text-xs font-bold text-white/70 hover:bg-white/10"
+            onClick={() => setSheet("open")}
+            title="규칙·카드·캐릭터 보기"
+            aria-label="규칙 보기"
+          >
+            ?
+          </button>
           <button
             className="rounded border border-white/15 px-2 py-1 text-xs text-white/70 hover:bg-white/10 lg:hidden"
             onClick={() => setLogOpen((v) => !v)}
@@ -181,6 +214,11 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
         big={urgent}
         label={urgent ? (iRespond && top ? "대응하세요" : "당신의 턴") : `${activeName}의 차례`}
       />
+      {helpOn && (
+        <p className="shrink-0 truncate text-[11px] text-sky-200/80" data-testid="situation">
+          {describeSituation(game)}
+        </p>
+      )}
 
       <div className="flex min-h-0 flex-1 gap-3">
         <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -217,6 +255,7 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
                   targetable={targetable(p)}
                   effect={events.seat[p.id]}
                   onTarget={() => onSeatClick(p)}
+                  onHover={helpOn ? (on) => setFocus(on ? { kind: "seat", player: p } : null) : undefined}
                 />
               ))}
             />
@@ -244,6 +283,8 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
               </div>
             )}
           </div>
+
+          {helpOn && <HelpStrip help={help} hint={helpHint} />}
 
           {/* ---------- 프롬프트 ---------- */}
           {mode.kind === "targetCard" && (
@@ -278,7 +319,16 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
                 </span>
                 <span className="font-bold text-amber-300">{CHARACTER_KO[me.character].name}</span>
                 <span className="truncate text-white/50">{CHARACTER_KO[me.character].desc}</span>
-                {me.role && <span className="ml-auto shrink-0 rounded bg-white/15 px-1.5 py-0.5 font-bold">{ROLE_KO[me.role]}</span>}
+                {me.role && (
+                  <span
+                    className="ml-auto shrink-0 cursor-help rounded bg-white/15 px-1.5 py-0.5 font-bold"
+                    onMouseEnter={() => helpOn && setFocus({ kind: "role", role: me.role! })}
+                    onMouseLeave={() => setFocus(null)}
+                    onClick={() => helpOn && setFocus({ kind: "role", role: me.role! })}
+                  >
+                    {ROLE_KO[me.role]}
+                  </span>
+                )}
                 {!me.alive && <span className="shrink-0 text-red-400">사망</span>}
               </div>
               <div className="flex flex-wrap items-end gap-1.5 sm:gap-2" data-testid="hand">
@@ -293,7 +343,10 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
                       disabled={!selecting && !playable(c)}
                       dimmed={mode.kind === "target" && mode.card.id !== c.id}
                       onClick={() => onHandClick(c)}
-                      onHover={(on) => setHovered(on && playable(c) ? c : null)}
+                      onHover={(on) => {
+                        setHovered(on && playable(c) ? c : null);
+                        if (helpOn) setFocus(on ? { kind: "card", card: c } : null);
+                      }}
                     />
                   );
                 })}
@@ -310,6 +363,15 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
           <LogFeed log={game.log} />
         </aside>
       </div>
+
+      {sheet && (
+        <HelpSheet
+          role={me?.role}
+          character={me ? CHARACTER_KO[me.character].name : undefined}
+          initialTab="role"
+          onClose={() => setSheet(null)}
+        />
+      )}
 
       {/* 모바일 기록 시트 */}
       {logOpen && (
@@ -534,28 +596,6 @@ function SidButton({ mode, setMode, send, busy }: { mode: Mode; setMode: (m: Mod
 
 const PHASE_KO = { start: "시작", jail: "감옥 판정", draw: "드로우", play: "플레이", discard: "버리기" } as const;
 const PENDING_KO = { bang: "뱅!", indians: "인디언!", gatling: "개틀링", duel: "결투", generalStore: "잡화점", kitCarlson: "킷 칼슨", dying: "생사 기로" } as const;
-
-const EQUIP: ReadonlySet<CardName> = new Set(["barrel", "scope", "mustang", "volcanic", "schofield", "remington", "carabine", "winchester"]);
-const isEquip = (n: CardName) => EQUIP.has(n);
-const unlimitedBang = (p: PlayerView) => p.character === "willyTheKid" || p.equipment.some((c) => c.name === "volcanic");
-
-function weaponRange(p: PlayerView): number {
-  const w = p.equipment.find((c) => isWeapon(c.name));
-  return w && isWeapon(w.name) ? WEAPON_RANGE[w.name] : 1;
-}
-
-function viewDistance(game: GameView, fromId: string, toId: string): number {
-  const alive = game.players.filter((p) => p.alive);
-  const a = alive.findIndex((p) => p.id === fromId);
-  const b = alive.findIndex((p) => p.id === toId);
-  if (a < 0 || b < 0) return 99;
-  const diff = Math.abs(a - b);
-  let d = Math.min(diff, alive.length - diff);
-  const from = alive[a], to = alive[b];
-  if (to.equipment.some((c) => c.name === "mustang") || to.character === "paulRegret") d += 1;
-  if (from.equipment.some((c) => c.name === "scope") || from.character === "roseDoolan") d -= 1;
-  return Math.max(1, d);
-}
 
 function useCountdown(deadline: number, skew: React.MutableRefObject<number>) {
   const [remaining, setRemaining] = useState(0);
