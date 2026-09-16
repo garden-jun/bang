@@ -177,6 +177,8 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
       setFocus({ kind: "card", card });
       return;
     }
+    // 킷 칼슨의 "pick"은 공개된 3장에서만 고른다 — 손패를 누르면 선택에 섞여 들어갔다
+    if (mode.kind === "multi" && mode.purpose === "pick") return;
     if (mode.kind === "multi") {
       const ids = mode.ids.includes(card.id) ? mode.ids.filter((i) => i !== card.id) : [...mode.ids, card.id];
       setMode({ ...mode, ids });
@@ -422,7 +424,7 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
               </div>
               <div className="flex flex-wrap items-end gap-1.5 sm:gap-2" data-testid="hand" ref={handRef}>
                 {(me.hand ?? []).map((c) => {
-                  const selecting = mode.kind === "multi";
+                  const selecting = mode.kind === "multi" && mode.purpose !== "pick";
                   return (
                     <DealIn key={c.id} cardId={c.id} from={deckRef} ready={dealReady}>
                       <CardFace
@@ -624,28 +626,32 @@ function buildPrompt(
             />
           )),
         );
-      case "kitCarlson":
+      case "kitCarlson": {
+        // 공개된 카드 중에서 고른 것만 센다 (다른 선택 모드의 id가 남아 있어도 섞이지 않게)
+        const shown = top.cards ?? [];
+        const picked = mode.kind === "multi" && mode.purpose === "pick" ? mode.ids.filter((id) => shown.some((c) => c.id === id)) : [];
         return box(
-          `킷 칼슨 — 2장을 고르세요 (${selectedIds.length}/2)`,
+          `킷 칼슨 — 2장을 고르세요 (${picked.length}/2)`,
           <>
-            {(top.cards ?? []).map((c) => (
+            {shown.map((c) => (
               <CardFace
                 key={c.id}
                 card={c}
                 size="sm"
-                selected={selectedIds.includes(c.id)}
+                selected={picked.includes(c.id)}
                 onHover={onCardHover ? (on) => onCardHover(on ? c : null) : undefined}
                 onClick={() => {
-                  const ids = selectedIds.includes(c.id) ? selectedIds.filter((i) => i !== c.id) : [...selectedIds, c.id].slice(-2);
+                  const ids = picked.includes(c.id) ? picked.filter((i) => i !== c.id) : [...picked, c.id].slice(-2);
                   setMode({ kind: "multi", purpose: "pick", count: 2, ids });
                 }}
               />
             ))}
-            <Button disabled={selectedIds.length !== 2 || busy} onClick={() => send({ type: "pickCards", cardIds: selectedIds })}>
+            <Button disabled={picked.length !== 2 || busy} onClick={() => send({ type: "pickCards", cardIds: picked })}>
               선택
             </Button>
           </>,
         );
+      }
       case "dying": {
         const beers = hand.filter((c) => c.name === "beer");
         const need = 1 - me.hp;
