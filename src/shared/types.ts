@@ -35,6 +35,11 @@ export interface RoomState {
    * 여럿이 되거나 게임이 시작되면 지운다. 화면에는 안 보이는 정리용 기록.
    */
   aloneSince?: number;
+  /**
+   * 이 시각 전에는 봇이 두지 않는다. 직전 수의 연출이 모든 화면에서 끝날 때까지 기다리게 한다.
+   * 봇 구동부는 여러 요청에서 동시에 뜨므로(액션·폴링) 기다림을 구동부 안이 아니라 방에 적는다.
+   */
+  botNotBefore?: number;
   game?: GameState;
 }
 

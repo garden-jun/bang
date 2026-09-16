@@ -2,6 +2,7 @@ import { botCandidates } from "@/game/bot";
 import { responder } from "@/game/core";
 import { applyAction } from "@/game/engine";
 import { toView } from "@/game/view";
+import { playbackMs } from "@/shared/pacing";
 import type { RoomState, RoomView } from "@/shared/types";
 import { chooseCandidate } from "./llm";
 import { getStore } from "./store";
@@ -11,16 +12,36 @@ import { loadRoom, withRoomLock } from "./room";
 const MAX_MOVES = 24;
 
 /**
- * 봇의 한 수가 최소 이만큼은 걸리게 한다.
+ * 봇의 한 수 사이 최소 간격. 실제 간격은 직전 수의 연출 길이(holdBots)와 이것 중 긴 쪽이다.
  *
- * 안 그러면 봇 여럿의 턴이 폴링 한 번 사이에 전부 끝나서, 사람은 결과만
- * 보고 무슨 일이 있었는지 못 본다. LLM이 이미 시간을 썼으면 그만큼 덜 쉰다.
- *
- * BOT_MIN_MOVE_MS로 조절한다 (0이면 즉시 — 테스트용).
- * 클라이언트 연출 간격(useGameEvents의 STEP_MS)과 함께 움직여야 한다 —
- * 봇이 연출보다 빨리 두면 큐가 밀려 사람이 따라 읽지 못한다.
+ * BOT_MIN_MOVE_MS로 조절한다 (0이면 기다리지 않는다 — 테스트용).
  */
 const MIN_MOVE_MS = Number(process.env.BOT_MIN_MOVE_MS ?? 1650);
+
+/**
+ * 상태가 바뀐 뒤 화면에 도착하기까지의 여유. 봇 차례에 구경하는 사람의 폴링 간격이
+ * 1.8초(toRoomView의 pollMs)라 평균 0.9초쯤 늦게 받는다.
+ */
+const ARRIVAL_MS = 1000;
+
+/**
+ * 방금 생긴 로그 줄의 연출이 화면에서 다 끝날 때까지 봇을 붙잡는다.
+ *
+ * 전에는 봇의 한 수마다 1.65초만 쉬었는데, 한 수가 로그를 여러 줄 남기면(뽑기·공격·술통 판정·피해)
+ * 화면은 그걸 한 줄씩 흘리느라 5초 넘게 걸려 봇이 연출을 계속 앞질렀다. 사람의 수 뒤에도 건다 —
+ * 사람이 뱅!을 쏘자마자 봇이 대응하면 쏘는 장면과 막는 장면이 겹친다.
+ *
+ * @param prevT 바뀌기 전 마지막 로그 번호
+ */
+export function holdBots(room: RoomState, prevT: number, now: number): void {
+  if (MIN_MOVE_MS <= 0 || !room.game) return;
+  const fresh = room.game.log.filter((l) => l.t > prevT);
+  if (fresh.length === 0) return;
+  const until = now + Math.max(MIN_MOVE_MS, playbackMs(fresh) + ARRIVAL_MS);
+  room.botNotBefore = Math.max(room.botNotBefore ?? 0, until);
+}
+
+export const lastLogT = (room: RoomState) => room.game?.log.at(-1)?.t ?? -1;
 
 /**
  * 한 요청에서 봇에 쓸 수 있는 시간. 서버리스 함수에는 실행시간 상한이 있는데,
@@ -37,14 +58,22 @@ const BUDGET_MS = 8000;
  */
 export async function runBots(code: string): Promise<void> {
   const runStartedAt = Date.now();
-  for (let i = 0; i < MAX_MOVES; i++) {
+  for (let moves = 0; moves < MAX_MOVES; ) {
     if (Date.now() - runStartedAt > BUDGET_MS) return;
-    const startedAt = Date.now();
     const room = await loadRoom(code, true);
     if (!room?.game || room.status !== "playing" || room.game.winner) return;
 
     const who = responder(room.game);
     if (!isBot(room, who)) return;
+
+    // 직전 연출이 아직 화면에 돌고 있다. 예산 안에서 기다릴 수 있으면 기다렸다가 다시 읽고,
+    // 넘치면 그만둔다 — 기다림이 끝난 뒤의 폴링이 구동부를 다시 띄운다 (roomService.getState).
+    const wait = (room.botNotBefore ?? 0) - Date.now();
+    if (wait > 0) {
+      if (Date.now() + wait - runStartedAt > BUDGET_MS) return;
+      await new Promise((r) => setTimeout(r, wait));
+      continue;
+    }
 
     // 같은 상태를 두 요청이 동시에 굴리지 않게 한 번만 잡는다.
     // 버전을 키에 넣어서, 다음 수는 다시 경쟁할 수 있게 둔다.
@@ -67,7 +96,10 @@ export async function runBots(code: string): Promise<void> {
       }
       if (responder(fresh.game) !== who) return { room: null, result: false };
       try {
-        fresh.game = applyAction(fresh.game, who, action, Date.now());
+        const prevT = lastLogT(fresh);
+        const now = Date.now();
+        fresh.game = applyAction(fresh.game, who, action, now);
+        holdBots(fresh, prevT, now);
       } catch {
         // 후보가 거부되는 건 버그지만, 판을 멈추느니 넘긴다
         return { room: null, result: false };
@@ -77,9 +109,7 @@ export async function runBots(code: string): Promise<void> {
     }).catch(() => false);
 
     if (!applied) return;
-
-    const spent = Date.now() - startedAt;
-    if (spent < MIN_MOVE_MS) await new Promise((r) => setTimeout(r, MIN_MOVE_MS - spent));
+    moves++;
   }
 }
 

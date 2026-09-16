@@ -16,6 +16,7 @@ import {
   type RoomView,
 } from "@/shared/types";
 import { ApiError } from "./api";
+import { botShouldMove, holdBots, lastLogT } from "./botRunner";
 import { deleteRoom, listPublicRooms, loadRoom, newRoomCode, requireRoom, saveRoom, withRoomLock } from "./room";
 import { getRoomOf, setRoomOf, type Session } from "./session";
 
@@ -60,7 +61,7 @@ export function toRoomView(room: RoomState, session: Session, now: number): Room
 
   // 사람끼리 하는 판에서는 "남이 한 수"가 폴링 간격만큼 늦게 도착한다 — 체감 지연을
   // 지배하는 건 이 값이다. 내 액션은 응답에 최신 뷰가 실려 오므로 영향받지 않는다.
-  // 단, 봇 차례에는 사람이 구경만 하므로 봇이 두는 속도(BOT_MIN_MOVE_MS, 기본 1650)에 맞춘다 —
+  // 단, 봇 차례에는 사람이 구경만 하므로 봇의 최소 간격(BOT_MIN_MOVE_MS, 기본 1650)에 맞춘다 —
   // 여기만 빨리 당기면 같은 상태를 헛되이 다시 받을 뿐이고, 더 느리면 여러 수가 한 번에
   // 몰려 와서 무슨 일이 있었는지 못 본다.
   let pollMs = 1200;
@@ -143,9 +144,11 @@ function tick(room: RoomState, now: number, touchId?: string): { changed: boolea
   }
 
   if (room.status === "playing" && room.game) {
+    const prevT = lastLogT(room);
     const next = applyTimeouts(room.game, now, (id) => !room.connectedIds.includes(id));
     if (next) {
       room.game = next;
+      holdBots(room, prevT, now);
       changed = true;
     }
   }
@@ -319,6 +322,21 @@ async function leaveCurrentRoom(session: Session): Promise<void> {
  * since와 버전이 같으면 null (304).
  */
 export async function getState(session: Session, code: string, since: number | null): Promise<RoomView | null> {
+  return (await pollState(session, code, since)).view;
+}
+
+/**
+ * 폴링. 바뀐 게 없으면 view는 null(304).
+ *
+ * botDue: 봇 차례이고 기다림(botNotBefore)도 끝났다. 봇 구동부는 연출을 기다리다 예산을
+ * 넘기면 그만두는데, 그 뒤로 방이 안 바뀌면 폴링이 전부 304라 아무도 구동부를 다시 띄우지
+ * 않는다. 304에서도 이걸 보고 띄운다.
+ */
+export async function pollState(
+  session: Session,
+  code: string,
+  since: number | null,
+): Promise<{ view: RoomView | null; botDue: boolean }> {
   const room = await requireRoom(code);
   const now = Date.now();
   if (seatOf(room, session.playerId) === "none") throw new ApiError(403, "이 방의 참가자가 아닙니다.");
@@ -335,7 +353,8 @@ export async function getState(session: Session, code: string, since: number | n
   } else {
     view = toRoomView(room, session, now);
   }
-  return since !== null && since === view.version ? null : view;
+  const botDue = botShouldMove(view) && (room.botNotBefore ?? 0) <= now;
+  return { view: since !== null && since === view.version ? null : view, botDue };
 }
 
 export async function updateSettings(session: Session, code: string, input: Partial<RoomSettings>): Promise<RoomView> {
@@ -364,6 +383,7 @@ export async function startGame(session: Session, code: string): Promise<RoomVie
       { turnSeconds: room.settings.turnSeconds },
     );
     room.status = "playing";
+    holdBots(room, -1, now);
     tick(room, now, session.playerId);
     return { room, result: toRoomView(room, session, now) };
   });
@@ -378,7 +398,9 @@ export async function doAction(session: Session, code: string, action: Action): 
 
     let error: unknown;
     try {
+      const prevT = lastLogT(room);
       room.game = applyAction(room.game, session.playerId, action, now);
+      holdBots(room, prevT, now);
     } catch (e) {
       error = e;
     }

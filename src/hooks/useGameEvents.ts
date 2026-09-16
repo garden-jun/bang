@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Card, CheckKind, LogMeta } from "@/game/types";
 import type { GameView } from "@/game/view";
+import { CHECK_HOLD_MS, MIN_STEP_MS, stepMs } from "@/shared/pacing";
 import type { RoomView } from "@/shared/types";
 
 export interface SeatEffect {
@@ -29,14 +30,11 @@ export interface CheckEvent {
   key: number;
 }
 
-/**
- * 한 번에 여러 사건이 몰려와도 이 간격으로 하나씩 보여준다.
- * globals.css의 --toast-ms/--arrow-ms, 서버의 BOT_MIN_MOVE_MS와 같이 움직인다 —
- * 하나만 바꾸면 연출이 잘리거나 혼자 남는다.
+/*
+ * 사건을 흘리는 간격(STEP_MS 등)은 shared/pacing.ts에 있다 — 서버가 봇을 이 연출이 끝날
+ * 때까지 기다리게 할 때 같은 숫자로 계산한다. globals.css의 --toast-ms/--arrow-ms와도
+ * 같이 움직인다 — 하나만 바꾸면 연출이 잘리거나 혼자 남는다.
  */
-const STEP_MS = 1350;
-/** 밀린 사건이 많으면 더 빨리 흘린다 (봇이 연달아 둘 때) */
-const MIN_STEP_MS = 630;
 /**
  * 내가 행동할 차례인데 아직 지난 장면을 재생 중일 때 쓰는 간격.
  *
@@ -54,11 +52,6 @@ const CATCH_UP_MS = 180;
  * 버리고 이 간격만 지킨다 — 봇이 연달아 둘 때의 큐 속도(STEP_MS/MIN_STEP_MS)는 그대로다.
  */
 const NEW_BEAT_GAP_MS = MIN_STEP_MS;
-/**
- * 판정 장면은 카드가 뒤집히고 결과 도장이 찍히는 것까지 봐야 의미가 있어,
- * 큐가 밀려 있어도 이만큼은 붙잡는다. 따라잡기 중에는 내 판정일 때만.
- */
-const CHECK_HOLD_MS = 1500;
 
 /** 테이블 위에 그릴 화살표 — 공격자에서 대상(들)로 */
 export interface ArrowEvent {
@@ -189,7 +182,8 @@ export function useGameEvents(view: RoomView | null) {
       // 내 차례인데 밀린 장면이 남아 있으면 빠르게 따라잡는다. 큐가 비면(=지금 보여준 게
       // 마지막 장면) 평소 속도로 돌아가, 나에게 벌어진 일은 놓치지 않는다.
       const catchUp = iActNow.current && queue.current.length > 0;
-      let step = catchUp ? CATCH_UP_MS : Math.max(MIN_STEP_MS, STEP_MS - queue.current.length * 180);
+      let step = catchUp ? CATCH_UP_MS : stepMs(queue.current.length);
+      // 판정은 따라잡기 중에도 내 판정이면 붙잡는다
       if (next.check && (!catchUp || next.check.from === meId.current)) step = Math.max(step, CHECK_HOLD_MS);
       timer.current = setTimeout(pump, step);
     }
