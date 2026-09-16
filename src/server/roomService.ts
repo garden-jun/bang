@@ -53,7 +53,8 @@ export function toRoomView(room: RoomState, session: Session, now: number): Room
         room.game,
         seat === "player"
           ? { kind: "player", id: session.playerId }
-          : { kind: "spectator", revealAll: room.settings.spectatorMode === "all" },
+          // 관전자에게는 항상 공개 정보만 보여준다 (방 설정으로 열지 않는다)
+          : { kind: "spectator", revealAll: false },
       )
     : undefined;
 
@@ -168,10 +169,6 @@ function tick(room: RoomState, now: number, touchId?: string): { changed: boolea
 function validateSettings(input: Partial<RoomSettings>, current: RoomSettings, playerCount: number): RoomSettings {
   const s = { ...current };
   if (input.isPublic !== undefined) s.isPublic = !!input.isPublic;
-  if (input.spectatorMode !== undefined) {
-    if (input.spectatorMode !== "public" && input.spectatorMode !== "all") throw new ApiError(400, "잘못된 관전 설정입니다.");
-    s.spectatorMode = input.spectatorMode;
-  }
   if (input.turnSeconds !== undefined) {
     const t = Number(input.turnSeconds);
     if (!Number.isInteger(t) || t < 20 || t > 180) throw new ApiError(400, "턴 시간은 20~180초여야 합니다.");
@@ -407,13 +404,13 @@ export async function kickPlayer(session: Session, code: string, targetId: strin
 }
 
 /**
- * 봇 이름은 AI1, AI2… 사람 닉네임처럼 보이는 이름을 주면 누가 봇인지 헷갈린다.
+ * 봇 이름은 AI_1, AI_2… 사람 닉네임처럼 보이는 이름을 주면 누가 봇인지 헷갈린다.
  * 빠진 번호가 있으면 다시 채운다 (봇을 뺐다 넣어도 번호가 치솟지 않게).
  */
 function nextBotName(room: RoomState): string {
   const taken = new Set(room.players.map((p) => p.nickname));
   for (let i = 1; ; i++) {
-    const name = `AI${i}`;
+    const name = `AI_${i}`;
     if (!taken.has(name)) return name;
   }
 }

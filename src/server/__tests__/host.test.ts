@@ -59,7 +59,7 @@ test("사람이 관전자뿐이어도 봇이 아니라 그 사람이 방장", as
   expect(v?.hostId).toBe(watcher.playerId);
 });
 
-test("봇 이름은 AI1, AI2 순서이고 뺀 번호를 다시 채운다", async () => {
+test("봇 이름은 AI_1, AI_2 순서이고 뺀 번호를 다시 채운다", async () => {
   const { createSession } = await import("../session");
   const { createRoom, addBot, removeBot } = await import("../roomService");
 
@@ -68,10 +68,10 @@ test("봇 이름은 AI1, AI2 순서이고 뺀 번호를 다시 채운다", async
   await addBot(me, code);
   await addBot(me, code);
   const v = await addBot(me, code);
-  expect(v.players.filter((p) => p.isBot).map((p) => p.nickname)).toEqual(["AI1", "AI2", "AI3"]);
+  expect(v.players.filter((p) => p.isBot).map((p) => p.nickname)).toEqual(["AI_1", "AI_2", "AI_3"]);
 
-  const ai2 = v.players.find((p) => p.nickname === "AI2")!;
+  const ai2 = v.players.find((p) => p.nickname === "AI_2")!;
   await removeBot(me, code, ai2.id);
   const after = await addBot(me, code);
-  expect(after.players.filter((p) => p.isBot).map((p) => p.nickname).sort()).toEqual(["AI1", "AI2", "AI3"]);
+  expect(after.players.filter((p) => p.isBot).map((p) => p.nickname).sort()).toEqual(["AI_1", "AI_2", "AI_3"]);
 });

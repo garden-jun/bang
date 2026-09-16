@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { Logo } from "@/components/Logo";
 import { Button, ErrorBanner, Input, NicknameField, Panel } from "@/components/ui";
 import { useSession } from "@/hooks/useSession";
 import { api } from "@/lib/api";
@@ -77,9 +78,12 @@ export default function LobbyPage() {
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-black tracking-tight text-amber-400">BANG!</h1>
-          <p className="text-xs text-white/60">친구들과 브라우저로 즐기는 서부 총잡이 카드 게임</p>
+        <div className="flex items-center gap-3">
+          <Logo className="h-10 w-10 shrink-0 text-amber-500" />
+          <div>
+            <h1 className="text-3xl font-black tracking-tight text-amber-400">BANG!</h1>
+            <p className="text-xs text-white/60">친구들과 브라우저로 즐기는 서부 총잡이 카드 게임</p>
+          </div>
         </div>
         <NicknameField value={nick} onChange={setTypedNick} disabled={busy} />
       </header>
@@ -135,18 +139,7 @@ export default function LobbyPage() {
                 </select>
               </label>
               <label className="flex items-center justify-between">
-                <span>관전자에게</span>
-                <select
-                  className="rounded border border-white/20 bg-black/30 px-2 py-1"
-                  value={settings.spectatorMode}
-                  onChange={(e) => setSettings({ ...settings, spectatorMode: e.target.value as RoomSettings["spectatorMode"] })}
-                >
-                  <option value="public">공개 정보만</option>
-                  <option value="all">손패·역할 전부</option>
-                </select>
-              </label>
-              <label className="flex items-center justify-between">
-                <span>공개 목록에 표시</span>
+                <span>방 공개 여부</span>
                 <input
                   type="checkbox"
                   checked={settings.isPublic}

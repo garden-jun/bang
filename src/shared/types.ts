@@ -2,11 +2,9 @@ import type { GameState } from "@/game/types";
 import type { GameView } from "@/game/view";
 
 export type RoomStatus = "waiting" | "playing" | "finished";
-export type SpectatorMode = "public" | "all";
 
 export interface RoomSettings {
   isPublic: boolean;
-  spectatorMode: SpectatorMode;
   turnSeconds: number;
   maxPlayers: number;
 }
@@ -79,7 +77,6 @@ export interface SessionInfo {
 
 export const DEFAULT_SETTINGS: RoomSettings = {
   isPublic: true,
-  spectatorMode: "public",
   turnSeconds: 60,
   maxPlayers: 7,
 };

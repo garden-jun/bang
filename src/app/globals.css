@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  --background: #16130f;
+  --background: #241f19;
   --foreground: #f3ede4;
   /* 테이블 펠트 */
-  --felt: #1f3b2e;
-  --felt-edge: #14261d;
+  --felt: #2a5140;
+  --felt-edge: #1b3529;
 }
 
 @theme inline {

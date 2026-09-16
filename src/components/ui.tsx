@@ -27,7 +27,7 @@ export function Input({ className = "", ...props }: InputHTMLAttributes<HTMLInpu
 
 export function Panel({ title, children, className = "" }: { title?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={`rounded-lg border border-white/10 bg-white/5 p-4 ${className}`}>
+    <section className={`rounded-lg border border-white/15 bg-white/[0.08] p-4 ${className}`}>
       {title && <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-amber-400">{title}</h2>}
       {children}
     </section>

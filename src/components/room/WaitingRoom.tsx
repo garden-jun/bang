@@ -146,23 +146,7 @@ export function WaitingRoom({
                 `${view.settings.turnSeconds}초`
               )}
             </Row>
-            <Row label="관전자">
-              {isHost ? (
-                <select
-                  className="rounded border border-white/20 bg-black/30 px-2 py-1"
-                  value={view.settings.spectatorMode}
-                  onChange={(e) => onSettings({ spectatorMode: e.target.value as RoomSettings["spectatorMode"] })}
-                >
-                  <option value="public">공개 정보만</option>
-                  <option value="all">전부 공개</option>
-                </select>
-              ) : view.settings.spectatorMode === "all" ? (
-                "전부 공개"
-              ) : (
-                "공개 정보만"
-              )}
-            </Row>
-            <Row label="공개 목록">
+            <Row label="방 공개 여부">
               {isHost ? (
                 <input type="checkbox" checked={view.settings.isPublic} onChange={(e) => onSettings({ isPublic: e.target.checked })} />
               ) : view.settings.isPublic ? (
