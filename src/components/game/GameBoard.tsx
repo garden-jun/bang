@@ -10,6 +10,7 @@ import { playReason, targetReason, viewDistance, weaponRange } from "@/game/view
 import { useGameEvents } from "@/hooks/useGameEvents";
 import type { RoomView } from "@/shared/types";
 import { CardBack, CardFace } from "./CardFace";
+import { DealIn } from "./DealIn";
 import { HelpSheet } from "./HelpSheet";
 import { HelpStrip } from "./HelpStrip";
 import { LogFeed } from "./LogFeed";
@@ -54,6 +55,18 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
   const [hovered, setHovered] = useState<Card | null>(null);
   const [busy, setBusy] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+
+  // ---------- 카드를 받는 연출 ----------
+  /** 카드가 날아올 출발점 */
+  const deckRef = useRef<HTMLDivElement>(null);
+  /**
+   * 게임판이 처음 그려질 때 이미 들고 있던 카드는 날아오지 않는다 —
+   * 새로고침만 해도 손패 전체가 다시 뿌려지면 무슨 일이 난 줄 안다.
+   */
+  const dealReady = useRef(false);
+  useEffect(() => {
+    dealReady.current = true;
+  }, []);
 
   // ---------- 도움말 ----------
   // 이 컴포넌트는 폴링 결과가 온 뒤 클라이언트에서만 붙으므로 초기값에서 브라우저를 읽어도 된다
@@ -243,7 +256,7 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
               arrow={events.arrow}
               center={
                 <div className="flex items-center gap-2 sm:gap-3">
-                  <div className="text-center">
+                  <div className="text-center" ref={deckRef}>
                     <CardBack size="sm" count={game.deckCount} />
                     <span className="mt-0.5 block text-[9px] text-white/40">덱</span>
                   </div>
@@ -362,19 +375,20 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
                 {(me.hand ?? []).map((c) => {
                   const selecting = mode.kind === "multi";
                   return (
-                    <CardFace
-                      key={c.id}
-                      card={c}
-                      size="md"
-                      selected={selecting && mode.ids.includes(c.id)}
-                      disabled={!selecting && !playable(c)}
-                      dimmed={mode.kind === "target" && mode.card.id !== c.id}
-                      onClick={() => onHandClick(c)}
-                      onHover={(on) => {
-                        setHovered(on && playable(c) ? c : null);
-                        if (helpOn) setFocus(on ? { kind: "card", card: c } : null);
-                      }}
-                    />
+                    <DealIn key={c.id} from={deckRef} ready={dealReady}>
+                      <CardFace
+                        card={c}
+                        size="md"
+                        selected={selecting && mode.ids.includes(c.id)}
+                        disabled={!selecting && !playable(c)}
+                        dimmed={mode.kind === "target" && mode.card.id !== c.id}
+                        onClick={() => onHandClick(c)}
+                        onHover={(on) => {
+                          setHovered(on && playable(c) ? c : null);
+                          if (helpOn) setFocus(on ? { kind: "card", card: c } : null);
+                        }}
+                      />
+                    </DealIn>
                   );
                 })}
                 {(me.hand?.length ?? 0) === 0 && <span className="text-xs text-white/40">손패가 없습니다</span>}

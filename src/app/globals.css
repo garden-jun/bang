@@ -89,6 +89,22 @@ body {
   animation: bang-pop 0.25s ease-out;
 }
 
+/* 덱에서 손패로 날아오는 카드 — 출발점은 DealIn이 픽셀로 넣어준다 */
+@keyframes bang-deal {
+  0% {
+    transform: translate(var(--deal-x, 0), var(--deal-y, -140px)) scale(0.55) rotate(-10deg);
+    opacity: 0;
+  }
+  25% { opacity: 1; }
+  100% { transform: none; opacity: 1; }
+}
+.anim-deal {
+  position: relative;
+  z-index: 20;
+  /* backwards — 뒤에 오는 카드가 차례를 기다리는 동안 제자리에 먼저 보이면 안 된다 */
+  animation: bang-deal 520ms cubic-bezier(0.22, 0.8, 0.3, 1) backwards;
+}
+
 @keyframes bang-toast {
   0% { transform: translateY(-8px); opacity: 0; }
   12%, 82% { transform: translateY(0); opacity: 1; }
@@ -138,6 +154,7 @@ body {
   .anim-active,
   .anim-urgent,
   .anim-pop,
+  .anim-deal,
   .anim-toast,
   .anim-arrow,
   .anim-arrow-icon,
