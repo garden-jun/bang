@@ -2,8 +2,14 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BANG! 온라인",
-  description: "친구들과 브라우저로 즐기는 BANG! 보드게임",
+  title: "SKALA BANG!",
+  description: "SKALA BANG!",
+  openGraph: {
+    title: "SKALA BANG!",
+    description: "SKALA BANG!",
+    siteName: "SKALA BANG!",
+    type: "website",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
