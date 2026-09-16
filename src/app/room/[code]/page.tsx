@@ -61,11 +61,13 @@ export default function RoomPage() {
     [ready, nickname, session, code],
   );
 
-  // 닉네임이 있으면 묻지 않고 바로 들어간다 — 대기 중이고 자리가 있으면 플레이어, 아니면 관전.
+  // 저장된 닉네임이 있으면 묻지 않고 바로 들어간다 — 대기 중이고 자리가 있으면 플레이어, 아니면 관전.
   // 방을 만든 사람도 이 경로로 자연스럽게 자기 방에 들어간다. 자리는 대기실에서 바꿀 수 있다.
+  // 지금 타이핑 중인 닉네임으로는 자동 입장하지 않는다 (한 글자 치자마자 들어가 버린다).
+  const autoJoin = typedNick === null && ready;
   const autoTried = useRef(false);
   useEffect(() => {
-    if (member || autoTried.current || busy || !ready) return;
+    if (member || autoTried.current || busy || !autoJoin) return;
     if (!info || info === "missing" || session.status === "loading") return;
     const canPlay = info.status === "waiting" && info.players < info.maxPlayers;
     // 렌더 직후 동기 setState를 피하려고 한 틱 미룬다
@@ -74,7 +76,7 @@ export default function RoomPage() {
       void join(canPlay ? "player" : "spectator");
     }, 0);
     return () => clearTimeout(t);
-  }, [member, busy, ready, info, session.status, join]);
+  }, [member, busy, autoJoin, info, session.status, join]);
 
   const leave = async () => {
     await room.leave().catch(() => {});
@@ -109,7 +111,7 @@ export default function RoomPage() {
     if (!info) return <Center>불러오는 중…</Center>;
     const full = info.players >= info.maxPlayers;
     const playing = info.status === "playing";
-    if (busy || (ready && !joinError)) return <Center>입장하는 중…</Center>;
+    if (busy || (autoJoin && !joinError)) return <Center>입장하는 중…</Center>;
     return (
       <Center>
         <Panel title={`${info.hostNickname}의 방 · ${code}`} className="w-full max-w-sm">
