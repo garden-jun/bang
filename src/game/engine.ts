@@ -312,7 +312,7 @@ function startBang(state: GameState, now: number, from: GamePlayer, to: GamePlay
   });
   const pd = topPending(state) as Extract<Pending, { kind: "bang" }>;
   for (let i = 0; i < hasBarrel(to) && pd.missedNeeded > 0; i++) {
-    if (drawCheck(state, to, "술통", isHeart)) pd.missedNeeded -= 1;
+    if (drawCheck(state, to, "barrel", isHeart)) pd.missedNeeded -= 1;
   }
   if (pd.missedNeeded <= 0) {
     state.pending.pop();
@@ -514,7 +514,7 @@ function advanceGatling(state: GameState, top: Extract<Pending, { kind: "gatling
   top.barrelCheckedFor = tid;
   const t = player(state, tid);
   for (let i = 0; i < hasBarrel(t); i++) {
-    if (drawCheck(state, t, "술통", isHeart)) {
+    if (drawCheck(state, t, "barrel", isHeart)) {
       top.targets.shift();
       log(state, `${name(state, tid)} 술통으로 개틀링 회피`, { kind: "dodge", from: tid });
       return true;
@@ -527,15 +527,15 @@ function processDynamite(state: GameState, cur: GamePlayer, now: number): void {
   state.turn.phase = "jail";
   const dyn = cur.equipment.find((c) => c.name === "dynamite");
   if (!dyn) return;
-  if (drawCheck(state, cur, "다이너마이트", isDynamiteExplode)) {
+  if (drawCheck(state, cur, "dynamite", isDynamiteExplode)) {
     discardFrom(state, cur, dyn.id);
-    log(state, `💥 ${name(state, cur.id)} 다이너마이트 폭발!`);
+    log(state, `💥 ${name(state, cur.id)} 다이너마이트 폭발!`, { kind: "outcome", from: cur.id, outcome: "explode" });
     damage(state, now, cur.id, 3);
   } else {
     removeCard(cur, dyn.id);
     const next = nextAlive(state, cur.id);
     next.equipment.push(dyn);
-    log(state, `다이너마이트가 ${name(state, next.id)}에게 넘어감`);
+    log(state, `다이너마이트가 ${name(state, next.id)}에게 넘어감`, { kind: "dynamite", from: cur.id, to: next.id });
   }
 }
 
@@ -543,12 +543,12 @@ function processJail(state: GameState, cur: GamePlayer, now: number): void {
   const jail = cur.equipment.find((c) => c.name === "jail");
   if (jail) {
     discardFrom(state, cur, jail.id);
-    if (!drawCheck(state, cur, "감옥", isHeart)) {
-      log(state, `${name(state, cur.id)} 감옥에서 못 나와 턴을 건너뜀`);
+    if (!drawCheck(state, cur, "jail", isHeart)) {
+      log(state, `${name(state, cur.id)} 감옥에서 못 나와 턴을 건너뜀`, { kind: "outcome", from: cur.id, outcome: "skip" });
       nextTurn(state, now);
       return;
     }
-    log(state, `${name(state, cur.id)} 감옥 탈출`);
+    log(state, `${name(state, cur.id)} 감옥 탈출`, { kind: "outcome", from: cur.id, outcome: "escape" });
   }
   state.turn.phase = "draw";
   Object.assign(state.turn, timed(state, now, state.config.turnSeconds));

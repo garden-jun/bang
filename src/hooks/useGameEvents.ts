@@ -1,13 +1,31 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { LogMeta } from "@/game/types";
+import type { Card, CheckKind, LogMeta } from "@/game/types";
 import type { GameView } from "@/game/view";
 import type { RoomView } from "@/shared/types";
 
 export interface SeatEffect {
-  kind: "hit" | "heal" | "death" | "dodge";
+  kind: "hit" | "heal" | "death";
   /** 같은 효과가 연달아 나도 애니메이션이 다시 걸리게 하는 키 */
+  key: number;
+}
+
+/**
+ * 좌석 위에 튀어오르는 배지. 흔들림(SeatEffect)과 따로 둔다 — 폭발 배지 바로 뒤에
+ * "피해 3" 흔들림이 오는데, 한 칸에 두면 흔들림이 배지를 덮어써 배지가 잘린다.
+ */
+export interface SeatBadge {
+  kind: "dodge" | "escape" | "skip" | "explode";
+  key: number;
+}
+
+/** 테이블 중앙에 크게 뒤집어 보여주는 판정 카드 */
+export interface CheckEvent {
+  from: string;
+  check: CheckKind;
+  cards: Card[];
+  ok: boolean;
   key: number;
 }
 
@@ -36,10 +54,15 @@ const CATCH_UP_MS = 180;
  * 버리고 이 간격만 지킨다 — 봇이 연달아 둘 때의 큐 속도(STEP_MS/MIN_STEP_MS)는 그대로다.
  */
 const NEW_BEAT_GAP_MS = MIN_STEP_MS;
+/**
+ * 판정 장면은 카드가 뒤집히고 결과 도장이 찍히는 것까지 봐야 의미가 있어,
+ * 큐가 밀려 있어도 이만큼은 붙잡는다. 따라잡기 중에는 내 판정일 때만.
+ */
+const CHECK_HOLD_MS = 1500;
 
 /** 테이블 위에 그릴 화살표 — 공격자에서 대상(들)로 */
 export interface ArrowEvent {
-  kind: Exclude<LogMeta["kind"], "dodge">;
+  kind: Exclude<LogMeta["kind"], "dodge" | "check" | "outcome">;
   from: string;
   to: string[];
   key: number;
@@ -48,7 +71,9 @@ export interface ArrowEvent {
 interface Beat {
   msg: string | null;
   effects?: Record<string, SeatEffect>;
+  badges?: Record<string, SeatBadge>;
   arrow?: ArrowEvent;
+  check?: CheckEvent;
 }
 
 /**
@@ -62,6 +87,8 @@ export function useGameEvents(view: RoomView | null) {
   const [message, setMessage] = useState<string | null>(null);
   const [seat, setSeat] = useState<Record<string, SeatEffect>>({});
   const [arrow, setArrow] = useState<ArrowEvent | null>(null);
+  const [badge, setBadge] = useState<Record<string, SeatBadge>>({});
+  const [check, setCheck] = useState<CheckEvent | null>(null);
 
   const lastLogT = useRef<number | null>(null);
   const prevHp = useRef<Map<string, number>>(new Map());
@@ -69,6 +96,7 @@ export function useGameEvents(view: RoomView | null) {
   const queue = useRef<Beat[]>([]);
   /** pump가 setTimeout으로 스스로를 다시 걸기 때문에 최신 값을 ref로 읽는다 */
   const iActNow = useRef(false);
+  const meId = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const effectKey = useRef(0);
   /** 마지막으로 장면을 보여준 시각 — 새 사건이 잔여 대기를 건너뛸 때 쓴다 */
@@ -80,6 +108,7 @@ export function useGameEvents(view: RoomView | null) {
     // 렌더 중에 ref를 쓰면 안 되므로(react-hooks/refs) 이펙트에서 갱신한다.
     // pump는 setTimeout으로 스스로를 다시 걸기 때문에 옛 클로저도 이 최신 값을 읽는다.
     iActNow.current = !!game && !game.winner && !!view && game.responder === view.me.id;
+    meId.current = view?.me.id ?? null;
     if (!game) return;
 
     // 생명/사망은 로그보다 확실하다 — 원인이 무엇이든 결과가 남는다
@@ -119,7 +148,11 @@ export function useGameEvents(view: RoomView | null) {
           const m = l.meta;
           if (m?.kind === "dodge") {
             // 막았다는 표시는 좌석 배지로
-            beat.effects = { ...beat.effects, [m.from]: { kind: "dodge", key: ++effectKey.current } };
+            beat.badges = { [m.from]: { kind: "dodge", key: ++effectKey.current } };
+          } else if (m?.kind === "outcome") {
+            beat.badges = { [m.from]: { kind: m.outcome, key: ++effectKey.current } };
+          } else if (m?.kind === "check") {
+            beat.check = { from: m.from, check: m.check, cards: m.cards, ok: m.ok, key: ++effectKey.current };
           } else if (m) {
             beat.arrow = { kind: m.kind, from: m.from, to: m.to ? [m.to] : (m.targets ?? []), key: ++effectKey.current };
           }
@@ -144,17 +177,20 @@ export function useGameEvents(view: RoomView | null) {
         return;
       }
       lastBeatAt.current = Date.now();
-      setMessage(next.msg);
+      // 판정은 테이블 중앙 패널이 같은 내용을 크게 보여주므로 말풍선을 겹쳐 띄우지 않는다
+      setMessage(next.check ? null : next.msg);
       // 화살표는 다음 화살표가 올 때까지 둔다 — 사라지는 건 CSS 애니메이션이 맡는다.
       // 여기서 지우면 뒤따르는 "피해 1" 사건이 0.9초 만에 선을 끊어 버린다.
       if (next.arrow) setArrow(next.arrow);
       if (next.effects) setSeat((s) => ({ ...s, ...next.effects }));
+      if (next.badges) setBadge((b) => ({ ...b, ...next.badges }));
+      // 판정 카드도 화살표처럼 다음 판정이 올 때까지 두고, 사라지는 건 CSS가 맡는다
+      if (next.check) setCheck(next.check);
       // 내 차례인데 밀린 장면이 남아 있으면 빠르게 따라잡는다. 큐가 비면(=지금 보여준 게
       // 마지막 장면) 평소 속도로 돌아가, 나에게 벌어진 일은 놓치지 않는다.
-      const step =
-        iActNow.current && queue.current.length > 0
-          ? CATCH_UP_MS
-          : Math.max(MIN_STEP_MS, STEP_MS - queue.current.length * 180);
+      const catchUp = iActNow.current && queue.current.length > 0;
+      let step = catchUp ? CATCH_UP_MS : Math.max(MIN_STEP_MS, STEP_MS - queue.current.length * 180);
+      if (next.check && (!catchUp || next.check.from === meId.current)) step = Math.max(step, CHECK_HOLD_MS);
       timer.current = setTimeout(pump, step);
     }
   }, [game, view]);
@@ -166,5 +202,5 @@ export function useGameEvents(view: RoomView | null) {
     [],
   );
 
-  return { message, seat, arrow };
+  return { message, seat, badge, check, arrow };
 }

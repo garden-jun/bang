@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyAction } from "../engine";
+import { log } from "../core";
+import { applyAction, settle } from "../engine";
 import { NOW, card, makeState, p } from "./util";
 
 function four() {
@@ -52,5 +53,51 @@ describe("로그 메타 (연출용)", () => {
     expect(last(a).meta).toEqual({ kind: "catBalou", from: "s", to: "o2" });
     a = applyAction(a, "s", { type: "play", cardId: jail.id, targetId: "r" }, NOW);
     expect(last(a).meta).toEqual({ kind: "jail", from: "s", to: "r" });
+  });
+
+  it("턴 시작 판정: check 메타와 결과(탈출/건너뜀/폭발), 불발 다이너마이트는 화살표", () => {
+    const heart = card("beer", "H", 5), club = card("beer", "C", 5), spade3 = card("beer", "S", 3);
+    // 덱은 뒤에서부터 뽑는다
+    const st = four();
+    st.turn = { ...st.turn, playerId: "o1", phase: "start" };
+    p(st, "o1").equipment = [card("jail"), card("dynamite")];
+    st.deck = [heart, club];
+    settle(st, NOW);
+    const metas = st.log.map((l) => l.meta).filter(Boolean);
+    expect(metas).toEqual([
+      { kind: "check", from: "o1", check: "dynamite", cards: [club], ok: false },
+      { kind: "dynamite", from: "o1", to: "o2" },
+      { kind: "check", from: "o1", check: "jail", cards: [heart], ok: true },
+      { kind: "outcome", from: "o1", outcome: "escape" },
+    ]);
+
+    const st2 = four();
+    st2.turn = { ...st2.turn, playerId: "o1", phase: "start" };
+    p(st2, "o1").equipment = [card("jail"), card("dynamite")];
+    st2.deck = [club, spade3];
+    settle(st2, NOW);
+    const m2 = st2.log.map((l) => l.meta).filter(Boolean);
+    expect(m2).toContainEqual({ kind: "outcome", from: "o1", outcome: "explode" });
+    expect(m2).toContainEqual({ kind: "outcome", from: "o1", outcome: "skip" });
+  });
+
+  it("술통 판정도 check 메타", () => {
+    const bang = card("bang");
+    const st = four();
+    p(st, "s").hand = [bang];
+    p(st, "o1").equipment = [card("barrel")];
+    st.deck = [card("beer", "H", 2)];
+    const a = applyAction(st, "s", { type: "play", cardId: bang.id, targetId: "o1" }, NOW);
+    expect(a.log.find((l) => l.meta?.kind === "check")?.meta).toMatchObject({ kind: "check", from: "o1", check: "barrel", ok: true });
+  });
+});
+
+describe("로그 번호", () => {
+  it("앞을 잘라낸 뒤에도 계속 늘어난다 (화면이 새 줄을 알아채는 기준)", () => {
+    const st = four();
+    for (let i = 0; i < 200; i++) log(st, `줄 ${i}`);
+    const ts = st.log.map((l) => l.t);
+    expect(new Set(ts).size).toBe(ts.length);
+    expect(ts.at(-1)).toBe(199);
   });
 });

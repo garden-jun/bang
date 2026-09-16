@@ -19,6 +19,7 @@ const ARROW_COLOR: Record<ArrowEvent["kind"], string> = {
   panic: "#eab308",
   catBalou: "#eab308",
   jail: "#9ca3af",
+  dynamite: "#ea580c",
 };
 /**
  * 겹친 좌석 사이에서도 방향이 읽히려면 선이 이만큼은 남아야 한다.
@@ -35,6 +36,7 @@ const ARROW_CARD: Record<ArrowEvent["kind"], CardName> = {
   panic: "panic",
   catBalou: "catBalou",
   jail: "jail",
+  dynamite: "dynamite",
 };
 
 /**

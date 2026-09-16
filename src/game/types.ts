@@ -92,13 +92,23 @@ export type Pending =
 
 export type Winner = "sheriff" | "outlaws" | "renegade";
 
+/** 카드 한 장을 뒤집어 운을 보는 판정 */
+export type CheckKind = "jail" | "dynamite" | "barrel";
+
 /** 연출용 구조화 정보 — "누가 누구에게 무엇을". 문장은 사람이, 메타는 화면이 읽는다. */
-export interface LogMeta {
-  kind: "bang" | "duel" | "panic" | "catBalou" | "jail" | "indians" | "gatling" | "dodge";
-  from: string;
-  to?: string;
-  targets?: string[];
-}
+export type LogMeta =
+  /** 화살표로 그리는 것. dynamite는 불발돼 다음 사람에게 넘어갈 때 */
+  | {
+      kind: "bang" | "duel" | "panic" | "catBalou" | "jail" | "indians" | "gatling" | "dynamite";
+      from: string;
+      to?: string;
+      targets?: string[];
+    }
+  | { kind: "dodge"; from: string }
+  /** ok는 "판정 조건이 나왔다" — 다이너마이트는 ok가 곧 폭발이다 */
+  | { kind: "check"; from: string; check: CheckKind; cards: Card[]; ok: boolean }
+  /** 턴 시작 판정의 결과 */
+  | { kind: "outcome"; from: string; outcome: "escape" | "skip" | "explode" };
 
 export interface LogEntry {
   t: number;

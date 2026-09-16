@@ -1,7 +1,7 @@
 import { WEAPON_RANGE, isWeapon } from "./cards";
 import { CARD_KO, cardLabel } from "./i18n";
 import { makeRng, type Rng } from "./rng";
-import type { Card, CardName, GamePlayer, GameState, LogMeta, Pending, Timed, Winner } from "./types";
+import type { Card, CardName, CheckKind, GamePlayer, GameState, LogMeta, Pending, Timed, Winner } from "./types";
 import { GameError } from "./types";
 
 // ---------- 조회 ----------
@@ -152,10 +152,12 @@ export function afterHandChange(state: GameState, p: GamePlayer): void {
 }
 
 /** "뽑기 판정": 덱 맨 위를 공개해 버리고 조건 확인. 럭키 듀크는 2장 중 유리한 쪽. */
+const CHECK_LABEL: Record<CheckKind, string> = { jail: "감옥", dynamite: "다이너마이트", barrel: "술통" };
+
 export function drawCheck(
   state: GameState,
   p: GamePlayer,
-  label: string,
+  check: CheckKind,
   pred: (c: Card) => boolean,
 ): boolean {
   const n = p.character === "luckyDuke" ? 2 : 1;
@@ -164,7 +166,8 @@ export function drawCheck(
   const ok = cards.some(pred);
   log(
     state,
-    `${name(state, p.id)} ${label} 판정: ${cards.map(cardLabel).join(", ")} → ${ok ? "성공" : "실패"}`,
+    `${name(state, p.id)} ${CHECK_LABEL[check]} 판정: ${cards.map(cardLabel).join(", ")} → ${ok ? "성공" : "실패"}`,
+    { kind: "check", from: p.id, check, cards, ok },
   );
   return ok;
 }

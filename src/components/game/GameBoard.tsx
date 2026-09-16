@@ -10,6 +10,7 @@ import { playReason, targetReason, viewDistance, weaponRange } from "@/game/view
 import { useGameEvents } from "@/hooks/useGameEvents";
 import type { RoomView } from "@/shared/types";
 import { CardBack, CardFace } from "./CardFace";
+import { CheckReveal } from "./CheckReveal";
 import { DealIn } from "./DealIn";
 import { FlyLayer, useFlyAway } from "./FlyAway";
 import { HelpSheet } from "./HelpSheet";
@@ -326,12 +327,20 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
                   inRange={p.id === meId || !isPlayer ? undefined : viewDistance(game, meId, p.id) <= myRange}
                   targetable={targetable(p)}
                   effect={events.seat[p.id]}
+                  badge={events.badge[p.id]}
                   onTarget={() => onSeatClick(p)}
                   onHover={helpOn ? (on) => setFocus(on ? { kind: "seat", player: p } : null) : undefined}
                   onCardHover={helpOn ? (card, ghost) => setFocus(card ? { kind: "card", card, plain: true, ghost } : null) : undefined}
                 />
               ))}
             />
+
+            {/* 판정 — 좌석이 중앙까지 차는 작은 화면에서도 보이도록 좌석 위에 띄운다 */}
+            {events.check && (
+              <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
+                <CheckReveal event={events.check} name={game.names[events.check.from]} />
+              </div>
+            )}
 
             {/* 방금 일어난 일 */}
             {events.message && (
