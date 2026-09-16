@@ -1,7 +1,7 @@
 import { WEAPON_RANGE, isWeapon } from "./cards";
 import { CARD_KO, cardLabel } from "./i18n";
 import { makeRng, type Rng } from "./rng";
-import type { Card, CardName, GamePlayer, GameState, Pending, Timed, Winner } from "./types";
+import type { Card, CardName, GamePlayer, GameState, LogMeta, Pending, Timed, Winner } from "./types";
 import { GameError } from "./types";
 
 // ---------- 조회 ----------
@@ -92,8 +92,8 @@ export function countsAs(p: GamePlayer, c: Card, as: "bang" | "missed"): boolean
 
 // ---------- 로그 ----------
 
-export function log(state: GameState, msg: string): void {
-  state.log.push({ t: state.log.length, msg });
+export function log(state: GameState, msg: string, meta?: LogMeta): void {
+  state.log.push(meta ? { t: state.log.length, msg, meta } : { t: state.log.length, msg });
   // 뷰는 최근 60줄만 쓴다. 방 전체가 매 폴링마다 오가므로 상한이 곧 대역폭이다.
   if (state.log.length > 80) state.log.splice(0, state.log.length - 80);
 }

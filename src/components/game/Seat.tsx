@@ -58,7 +58,7 @@ export function Seat({
       onClick={targetable ? onTarget : undefined}
       onMouseEnter={onHover ? () => onHover(true) : undefined}
       onMouseLeave={onHover ? () => onHover(false) : undefined}
-      className={`${anim} ${ring} ${reach} ${dead ? "grayscale" : ""} w-full rounded-xl border border-white/10 p-1.5 text-[9px]
+      className={`${anim} ${ring} ${reach} ${dead ? "grayscale" : ""} relative w-full rounded-xl border border-white/10 p-1.5 text-[9px]
         backdrop-blur-sm transition sm:p-2 sm:text-[11px]`}
     >
       <div className="flex items-center gap-1">
@@ -97,6 +97,13 @@ export function Seat({
           <CardBack size="xs" count={player.handCount} />
         </span>
       </div>
+
+      {/* 막았다! — 맞았을 때만 연출이 있고 막았을 땐 아무것도 없던 걸 채운다 */}
+      {effect?.kind === "dodge" && (
+        <div key={effect.key} className="anim-badge pointer-events-none absolute -top-2 left-1/2 z-30 -translate-x-1/2 rounded-full bg-sky-500 px-2 py-0.5 text-[10px] font-black text-white shadow-lg ring-2 ring-white/60">
+          빗나감!
+        </div>
+      )}
 
       {player.equipment.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-0.5">

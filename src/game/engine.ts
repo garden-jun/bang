@@ -189,7 +189,7 @@ function playCard(
       if (d > weaponRange(p)) throw new GameError(`사거리 밖입니다. (거리 ${d}, 사거리 ${weaponRange(p)})`);
       spendCard();
       state.turn.bangsPlayed += 1;
-      log(state, `${n} → ${name(state, t.id)} 뱅!`);
+      log(state, `${n} → ${name(state, t.id)} 뱅!`, { kind: "bang", from: p.id, to: t.id });
       startBang(state, now, p, t);
       break;
     }
@@ -235,19 +235,23 @@ function playCard(
     case "indians": {
       spendCard();
       log(state, `${n} 인디언! — 모두 뱅!을 내거나 피해 1`);
-      pushPending(state, now, { kind: "indians", from: p.id, targets: othersClockwise(state, p.id).map((x) => x.id) });
+      const targets = othersClockwise(state, p.id).map((x) => x.id);
+      state.log[state.log.length - 1].meta = { kind: "indians", from: p.id, targets };
+      pushPending(state, now, { kind: "indians", from: p.id, targets });
       break;
     }
     case "gatling": {
       spendCard();
       log(state, `${n} 개틀링! — 모두에게 뱅!`);
-      pushPending(state, now, { kind: "gatling", from: p.id, targets: othersClockwise(state, p.id).map((x) => x.id) });
+      const targets = othersClockwise(state, p.id).map((x) => x.id);
+      state.log[state.log.length - 1].meta = { kind: "gatling", from: p.id, targets };
+      pushPending(state, now, { kind: "gatling", from: p.id, targets });
       break;
     }
     case "duel": {
       const t = requireTarget();
       spendCard();
-      log(state, `${n} → ${name(state, t.id)} 결투!`);
+      log(state, `${n} → ${name(state, t.id)} 결투!`, { kind: "duel", from: p.id, to: t.id });
       pushPending(state, now, { kind: "duel", from: p.id, to: t.id, current: t.id });
       break;
     }
@@ -261,7 +265,7 @@ function playCard(
       if (t.role === "sheriff") throw new GameError("보안관은 감옥에 가둘 수 없습니다.");
       if (hasEquip(t, "jail")) throw new GameError("이미 감옥에 있습니다.");
       t.equipment.push(removeCard(p, card.id));
-      log(state, `${n} → ${name(state, t.id)} 감옥에 가둠`);
+      log(state, `${n} → ${name(state, t.id)} 감옥에 가둠`, { kind: "jail", from: p.id, to: t.id });
       break;
     }
     default: {
@@ -291,10 +295,10 @@ function takeCard(state: GameState, from: GamePlayer, to: GamePlayer, targetCard
   }
   if (mode === "steal") {
     from.hand.push(card);
-    log(state, `${name(state, from.id)} 패닉! → ${name(state, to.id)}의 카드 1장 가져옴`);
+    log(state, `${name(state, from.id)} 패닉! → ${name(state, to.id)}의 카드 1장 가져옴`, { kind: "panic", from: from.id, to: to.id });
   } else {
     state.discard.push(card);
-    log(state, `${name(state, from.id)} 캣 발루 → ${name(state, to.id)}의 ${cardName(card)} 버림`);
+    log(state, `${name(state, from.id)} 캣 발루 → ${name(state, to.id)}의 ${cardName(card)} 버림`, { kind: "catBalou", from: from.id, to: to.id });
   }
   afterHandChange(state, to);
 }
@@ -312,7 +316,7 @@ function startBang(state: GameState, now: number, from: GamePlayer, to: GamePlay
   }
   if (pd.missedNeeded <= 0) {
     state.pending.pop();
-    log(state, `${name(state, to.id)} 술통으로 뱅! 회피`);
+    log(state, `${name(state, to.id)} 술통으로 뱅! 회피`, { kind: "dodge", from: to.id });
   }
 }
 
@@ -333,7 +337,7 @@ function handlePendingResponse(state: GameState, p: GamePlayer, top: Pending, ac
       if (cards.length !== top.missedNeeded) throw new GameError(`빗나감! ${top.missedNeeded}장이 필요합니다.`);
       for (const c of cards) discardFrom(state, p, c.id);
       state.pending.pop();
-      log(state, `${n} 빗나감!`);
+      log(state, `${n} 빗나감!`, { kind: "dodge", from: p.id });
       afterHandChange(state, p);
       return;
     }
@@ -350,7 +354,7 @@ function handlePendingResponse(state: GameState, p: GamePlayer, top: Pending, ac
       const c = requireHandCard(p, ids[0]);
       if (!countsAs(p, c, need)) throw new GameError(need === "missed" ? "빗나감!만 사용할 수 있습니다." : "뱅!만 사용할 수 있습니다.");
       discardFrom(state, p, c.id);
-      log(state, `${n} ${cardName(c)}(으)로 대응`);
+      log(state, `${n} ${cardName(c)}(으)로 대응`, { kind: "dodge", from: p.id });
       afterHandChange(state, p);
       return;
     }
@@ -367,7 +371,7 @@ function handlePendingResponse(state: GameState, p: GamePlayer, top: Pending, ac
       const c = requireHandCard(p, ids[0]);
       if (!countsAs(p, c, "bang")) throw new GameError("뱅!만 사용할 수 있습니다.");
       discardFrom(state, p, c.id);
-      log(state, `${n} 결투: 뱅!`);
+      log(state, `${n} 결투: 뱅!`, { kind: "duel", from: p.id, to: other });
       top.current = other;
       afterHandChange(state, p);
       return;
@@ -512,7 +516,7 @@ function advanceGatling(state: GameState, top: Extract<Pending, { kind: "gatling
   for (let i = 0; i < hasBarrel(t); i++) {
     if (drawCheck(state, t, "술통", isHeart)) {
       top.targets.shift();
-      log(state, `${name(state, tid)} 술통으로 개틀링 회피`);
+      log(state, `${name(state, tid)} 술통으로 개틀링 회피`, { kind: "dodge", from: tid });
       return true;
     }
   }

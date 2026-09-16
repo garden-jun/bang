@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { LogMeta } from "@/game/types";
 import type { GameView } from "@/game/view";
 import type { RoomView } from "@/shared/types";
 
 export interface SeatEffect {
-  kind: "hit" | "heal" | "death";
+  kind: "hit" | "heal" | "death" | "dodge";
   /** 같은 효과가 연달아 나도 애니메이션이 다시 걸리게 하는 키 */
   key: number;
 }
@@ -15,9 +16,18 @@ const STEP_MS = 900;
 /** 밀린 사건이 많으면 더 빨리 흘린다 (봇이 연달아 둘 때) */
 const MIN_STEP_MS = 420;
 
+/** 테이블 위에 그릴 화살표 — 공격자에서 대상(들)로 */
+export interface ArrowEvent {
+  kind: Exclude<LogMeta["kind"], "dodge">;
+  from: string;
+  to: string[];
+  key: number;
+}
+
 interface Beat {
   msg: string | null;
   effects?: Record<string, SeatEffect>;
+  arrow?: ArrowEvent;
 }
 
 /**
@@ -30,6 +40,7 @@ interface Beat {
 export function useGameEvents(view: RoomView | null) {
   const [message, setMessage] = useState<string | null>(null);
   const [seat, setSeat] = useState<Record<string, SeatEffect>>({});
+  const [arrow, setArrow] = useState<ArrowEvent | null>(null);
 
   const lastLogT = useRef<number | null>(null);
   const prevHp = useRef<Map<string, number>>(new Map());
@@ -71,7 +82,19 @@ export function useGameEvents(view: RoomView | null) {
       if (hasEffects) queue.current.push({ msg: null, effects });
     } else {
       // 이번 폴링의 연출은 이 묶음의 마지막 사건에 붙인다
-      queue.current.push(...fresh.map((l, i) => ({ msg: l.msg, effects: i === fresh.length - 1 && hasEffects ? effects : undefined })));
+      queue.current.push(
+        ...fresh.map((l, i) => {
+          const beat: Beat = { msg: l.msg, effects: i === fresh.length - 1 && hasEffects ? effects : undefined };
+          const m = l.meta;
+          if (m?.kind === "dodge") {
+            // 막았다는 표시는 좌석 배지로
+            beat.effects = { ...beat.effects, [m.from]: { kind: "dodge", key: ++effectKey.current } };
+          } else if (m) {
+            beat.arrow = { kind: m.kind, from: m.from, to: m.to ? [m.to] : (m.targets ?? []), key: ++effectKey.current };
+          }
+          return beat;
+        }),
+      );
     }
 
     // setState는 타이머 콜백에서만 — 이펙트 본문에서 바로 부르면 연쇄 렌더가 된다
@@ -87,6 +110,9 @@ export function useGameEvents(view: RoomView | null) {
         return;
       }
       setMessage(next.msg);
+      // 화살표는 다음 화살표가 올 때까지 둔다 — 사라지는 건 CSS 애니메이션이 맡는다.
+      // 여기서 지우면 뒤따르는 "피해 1" 사건이 0.9초 만에 선을 끊어 버린다.
+      if (next.arrow) setArrow(next.arrow);
       if (next.effects) setSeat((s) => ({ ...s, ...next.effects }));
       // 밀린 게 많으면 간격을 줄여 따라잡는다
       const step = Math.max(MIN_STEP_MS, STEP_MS - queue.current.length * 120);
@@ -101,5 +127,5 @@ export function useGameEvents(view: RoomView | null) {
     [],
   );
 
-  return { message, seat };
+  return { message, seat, arrow };
 }

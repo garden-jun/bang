@@ -10,7 +10,7 @@ const RANK: Record<number, string> = { 1: "A", 11: "J", 12: "Q", 13: "K" };
  * 카드 아이콘. 11px 글씨를 읽어야 뱅!과 빗나감!을 구분하던 문제 때문에,
  * 흘끗 봐도 갈라지는 모양을 하나씩 준다.
  */
-function CardIcon({ name, className = "" }: { name: CardName; className?: string }) {
+export function CardIcon({ name, className = "" }: { name: CardName; className?: string }) {
   const p = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   const paths: Record<CardName, React.ReactNode> = {
     // 총알이 날아가는 모양

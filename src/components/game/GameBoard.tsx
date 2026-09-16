@@ -233,6 +233,8 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
           {/* ---------- 테이블 ---------- */}
           <div className="relative min-h-0 flex-1">
             <Table
+              seatIds={seats.map((p) => p.id)}
+              arrow={events.arrow}
               center={
                 <div className="flex items-center gap-2 sm:gap-3">
                   <div className="text-center">

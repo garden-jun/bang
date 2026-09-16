@@ -92,9 +92,18 @@ export type Pending =
 
 export type Winner = "sheriff" | "outlaws" | "renegade";
 
+/** 연출용 구조화 정보 — "누가 누구에게 무엇을". 문장은 사람이, 메타는 화면이 읽는다. */
+export interface LogMeta {
+  kind: "bang" | "duel" | "panic" | "catBalou" | "jail" | "indians" | "gatling" | "dodge";
+  from: string;
+  to?: string;
+  targets?: string[];
+}
+
 export interface LogEntry {
   t: number;
   msg: string;
+  meta?: LogMeta;
 }
 
 export interface GameConfig {
