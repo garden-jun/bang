@@ -182,6 +182,7 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
           </span>
         )}
         <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+          {view.spectators.length > 0 && <SpectatorBadge spectators={view.spectators} meId={meId} />}
           <button
             className={`rounded border px-2 py-1 text-xs ${helpOn ? "border-amber-500/50 bg-amber-900/30 text-amber-200" : "border-white/15 text-white/50"} hover:bg-white/10`}
             onClick={toggleHelp}
@@ -364,7 +365,9 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
               </div>
             </div>
           ) : (
-            <p className="shrink-0 text-center text-xs text-white/50">관전 중입니다</p>
+            <p className="shrink-0 text-center text-xs text-white/50">
+              관전 중입니다{view.spectators.length > 1 && ` · 함께 보는 사람 ${view.spectators.length - 1}명`}
+            </p>
           )}
         </div>
 
@@ -393,9 +396,49 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
                 닫기
               </button>
             </div>
+            {view.spectators.length > 0 && (
+              <p className="mb-2 text-xs text-white/50">
+                관전 {view.spectators.length} · {view.spectators.map((s) => s.nickname).join(", ")}
+              </p>
+            )}
             <LogFeed log={game.log} />
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 관전자는 좌석이 없어 테이블에 나타나지 않는다 — 인게임에서 누가 보고 있는지 알 방법이
+ * 대기실뿐이었다. 헤더에는 인원수만 두고(자리가 좁다), 누르면 이름을 편다.
+ */
+function SpectatorBadge({ spectators, meId }: { spectators: RoomView["spectators"]; meId: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    /* 폰에서는 헤더가 이미 꽉 차 턴 표시가 밀려난다 — 아래 기록 시트에서 보여준다 */
+    <div className="relative hidden sm:block">
+      <button
+        className="rounded border border-white/15 px-2 py-1 text-xs text-white/70 hover:bg-white/10"
+        onClick={() => setOpen((v) => !v)}
+        title="관전자 보기"
+        aria-expanded={open}
+      >
+        관전 {spectators.length}
+      </button>
+      {open && (
+        <>
+          {/* 바깥을 누르면 닫는다. 그 클릭이 게임판까지 새어 들어가면 조준이 풀린다 */}
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <ul className="absolute right-0 z-50 mt-1 max-h-60 w-40 overflow-y-auto rounded-lg border border-white/15 bg-[#16130f] p-1.5 text-xs shadow-lg">
+            {spectators.map((s) => (
+              <li key={s.id} className="flex items-center gap-2 rounded px-1.5 py-1">
+                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${s.connected ? "bg-green-400" : "bg-white/25"}`} />
+                <span className={`truncate ${s.id === meId ? "font-bold text-amber-300" : "text-white/80"}`}>{s.nickname}</span>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );
