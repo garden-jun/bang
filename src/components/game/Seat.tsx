@@ -84,7 +84,7 @@ export function Seat({
       : undefined;
 
   const anim =
-    effect?.kind === "hit" ? "anim-hit anim-flash-hit" : effect?.kind === "heal" ? "anim-flash-heal" : effect?.kind === "death" ? "anim-death" : "";
+    effect?.kind === "hit" ? "anim-hit" : effect?.kind === "heal" ? "anim-flash-heal" : effect?.kind === "death" ? "anim-death" : "";
 
   const ring = targetable
     ? "ring-2 ring-red-500 bg-red-950/40 cursor-pointer hover:bg-red-900/50 hover:scale-[1.03]"
@@ -96,7 +96,7 @@ export function Seat({
   const reach = dead || isMe || inRange === undefined ? "" : inRange ? "" : "opacity-45";
 
   return (
-    // 바깥은 고정, 안쪽 상자만 key로 갈아끼워 흔들림을 다시 건다. 배지처럼 한 번만 재생할
+    // 바깥은 고정, 안쪽만 key로 갈아끼워 흔들림을 다시 건다. 배지처럼 한 번만 재생할
     // 연출을 안쪽에 두면 뒤따르는 "피해" 흔들림이 상자를 갈아끼울 때 처음부터 다시 재생된다.
     <div
       // 손패에서 날아가는 카드가 이 좌석을 도착지로 찾는다 (FlyAway)
@@ -106,93 +106,96 @@ export function Seat({
       onMouseLeave={onHover ? () => onHover(false) : undefined}
       className="relative w-full"
     >
-      <div
-        key={effect?.key}
-        className={`${anim} ${ring} ${reach} ${dead ? "grayscale" : ""} relative w-full rounded-xl border border-white/10 p-1.5 text-[9px]
-          backdrop-blur-sm transition sm:p-2 sm:text-[11px]`}
-      >
-        <div className="flex items-center gap-1">
-          {!isBot && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connected ? "bg-green-400" : "bg-white/25"}`} />}
-          {isBot && <span className="shrink-0 rounded bg-sky-800/80 px-1 text-[8px] font-bold text-sky-200">AI</span>}
-          <span className={`truncate font-bold ${isMe ? "text-amber-300" : ""}`}>{name}</span>
-          {player.role && (
-            <span
-              className={`ml-auto shrink-0 rounded px-1 text-[9px] font-bold ${
-                player.role === "sheriff" ? "bg-amber-500 text-black" : "bg-white/15 text-white/80"
-              }`}
-            >
-              {ROLE_KO[player.role]}
-            </span>
-          )}
-          {!player.role && distance !== undefined && !dead && (
-            <span
-              className={`ml-auto shrink-0 rounded px-1 text-[9px] font-mono ${inRange ? "bg-amber-500/25 text-amber-200" : "bg-white/10 text-white/40"}`}
-              title={`거리 ${distance}${inRange ? " — 사거리 안" : " — 사거리 밖"}`}
-            >
-              {distance}
-            </span>
-          )}
-        </div>
-
-        <div className="mt-0.5 truncate text-white/55" title={ch.desc}>
-          {ch.name}
-        </div>
-
-        <div className="mt-1 flex items-center gap-1">
-          <span className="tracking-tighter" aria-label={`생명 ${player.hp}/${player.maxHp}`}>
-            <span className="text-red-500">{"♥".repeat(Math.max(0, player.hp))}</span>
-            <span className="text-white/15">{"♥".repeat(Math.max(0, player.maxHp - player.hp))}</span>
-          </span>
-          {/* 손패 수 — 카드 뒷면을 통째로 그리면 좌석 높이의 절반을 먹어 좌석끼리 겹쳤다 */}
-          <span className="ml-auto flex items-center gap-1 font-bold text-white/80" title={`손패 ${player.handCount}장`}>
-            <span className="h-3.5 w-2.5 rounded-sm border border-red-950 bg-[repeating-linear-gradient(45deg,#7f1d1d_0_2px,#9f1239_2px_4px)]" />
-            {player.handCount}
-          </span>
-        </div>
-
-        {jailed && (
-          <>
-            <div className="pointer-events-none absolute inset-0 z-10 rounded-xl bg-slate-950/30" style={{ backgroundImage: BARS }} />
-            <div
-              className="absolute -left-1.5 -top-2 z-20 flex items-center gap-0.5 rounded-full bg-slate-300 px-1.5 py-px text-[9px] font-black text-slate-900 shadow ring-1 ring-black/40"
-              title="감옥 — 턴 시작에 ♥가 나오면 탈출, 아니면 턴을 건너뜁니다"
-            >
-              <CardIcon name="jail" className="h-2.5 w-2.5" />
-              감옥
-            </div>
-          </>
-        )}
-
-        {dynamite && (
-          <div
-            className="absolute -right-1.5 -top-2 z-20 flex h-5 w-5 items-center justify-center rounded-full bg-orange-600 text-white shadow ring-1 ring-black/40"
-            title="다이너마이트 — 턴 시작에 ♠2~9가 나오면 폭발(생명 -3, 약 15%), 아니면 다음 사람에게 넘어갑니다"
-          >
-            <CardIcon name="dynamite" className="h-3 w-3" />
-            <span className="anim-fuse absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-yellow-300" />
-          </div>
-        )}
-
-        {(player.equipment.length > 0 || innate) && (
-          <div className="mt-1 flex flex-wrap gap-0.5" data-equip={player.id}>
-            {player.equipment.map((c) => (
-              <CardFace key={c.id} card={c} size="chip" onHover={cardHover(c)} />
-            ))}
-            {/* 같은 이름의 진짜 카드를 이미 장착했으면 중복해서 보여주지 않는다 */}
-            {innateCard && !player.equipment.some((c) => c.name === innateCard.name) && (
-              <CardFace card={innateCard} size="chip" ghost onHover={cardHover(innateCard, true)} />
+      {/* 흔들림·섬광은 상자와 다른 요소에 건다. 차례인 좌석의 anim-active와 한 요소에 두면
+          animation 속성끼리 덮어써서, 정작 대응하다 맞은 사람이 흔들리지 않았다 */}
+      <div key={effect?.key} className={`${anim} rounded-xl`}>
+        <div
+          className={`${ring} ${reach} ${dead ? "grayscale" : ""} relative w-full rounded-xl border border-white/10 p-1.5 text-[9px]
+            backdrop-blur-sm transition sm:p-2 sm:text-[11px]`}
+        >
+          <div className="flex items-center gap-1">
+            {!isBot && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connected ? "bg-green-400" : "bg-white/25"}`} />}
+            {isBot && <span className="shrink-0 rounded bg-sky-800/80 px-1 text-[8px] font-bold text-sky-200">AI</span>}
+            <span className={`truncate font-bold ${isMe ? "text-amber-300" : ""}`}>{name}</span>
+            {player.role && (
+              <span
+                className={`ml-auto shrink-0 rounded px-1 text-[9px] font-bold ${
+                  player.role === "sheriff" ? "bg-amber-500 text-black" : "bg-white/15 text-white/80"
+                }`}
+              >
+                {ROLE_KO[player.role]}
+              </span>
+            )}
+            {!player.role && distance !== undefined && !dead && (
+              <span
+                className={`ml-auto shrink-0 rounded px-1 text-[9px] font-mono ${inRange ? "bg-amber-500/25 text-amber-200" : "bg-white/10 text-white/40"}`}
+                title={`거리 ${distance}${inRange ? " — 사거리 안" : " — 사거리 밖"}`}
+              >
+                {distance}
+              </span>
             )}
           </div>
-        )}
 
-        {/* 전체 공개 관전 */}
-        {player.hand && !isMe && (
-          <div className="mt-1 flex flex-wrap gap-0.5 border-t border-white/10 pt-1">
-            {player.hand.map((c) => (
-              <CardFace key={c.id} card={c} size="chip" onHover={cardHover(c)} />
-            ))}
+          <div className="mt-0.5 truncate text-white/55" title={ch.desc}>
+            {ch.name}
           </div>
-        )}
+
+          <div className="mt-1 flex items-center gap-1">
+            <span className="tracking-tighter" aria-label={`생명 ${player.hp}/${player.maxHp}`}>
+              <span className="text-red-500">{"♥".repeat(Math.max(0, player.hp))}</span>
+              <span className="text-white/15">{"♥".repeat(Math.max(0, player.maxHp - player.hp))}</span>
+            </span>
+            {/* 손패 수 — 카드 뒷면을 통째로 그리면 좌석 높이의 절반을 먹어 좌석끼리 겹쳤다 */}
+            <span className="ml-auto flex items-center gap-1 font-bold text-white/80" title={`손패 ${player.handCount}장`}>
+              <span className="h-3.5 w-2.5 rounded-sm border border-red-950 bg-[repeating-linear-gradient(45deg,#7f1d1d_0_2px,#9f1239_2px_4px)]" />
+              {player.handCount}
+            </span>
+          </div>
+
+          {jailed && (
+            <>
+              <div className="pointer-events-none absolute inset-0 z-10 rounded-xl bg-slate-950/30" style={{ backgroundImage: BARS }} />
+              <div
+                className="absolute -left-1.5 -top-2 z-20 flex items-center gap-0.5 rounded-full bg-slate-300 px-1.5 py-px text-[9px] font-black text-slate-900 shadow ring-1 ring-black/40"
+                title="감옥 — 턴 시작에 ♥가 나오면 탈출, 아니면 턴을 건너뜁니다"
+              >
+                <CardIcon name="jail" className="h-2.5 w-2.5" />
+                감옥
+              </div>
+            </>
+          )}
+
+          {dynamite && (
+            <div
+              className="absolute -right-1.5 -top-2 z-20 flex h-5 w-5 items-center justify-center rounded-full bg-orange-600 text-white shadow ring-1 ring-black/40"
+              title="다이너마이트 — 턴 시작에 ♠2~9가 나오면 폭발(생명 -3, 약 15%), 아니면 다음 사람에게 넘어갑니다"
+            >
+              <CardIcon name="dynamite" className="h-3 w-3" />
+              <span className="anim-fuse absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-yellow-300" />
+            </div>
+          )}
+
+          {(player.equipment.length > 0 || innate) && (
+            <div className="mt-1 flex flex-wrap gap-0.5" data-equip={player.id}>
+              {player.equipment.map((c) => (
+                <CardFace key={c.id} card={c} size="chip" onHover={cardHover(c)} />
+              ))}
+              {/* 같은 이름의 진짜 카드를 이미 장착했으면 중복해서 보여주지 않는다 */}
+              {innateCard && !player.equipment.some((c) => c.name === innateCard.name) && (
+                <CardFace card={innateCard} size="chip" ghost onHover={cardHover(innateCard, true)} />
+              )}
+            </div>
+          )}
+
+          {/* 전체 공개 관전 */}
+          {player.hand && !isMe && (
+            <div className="mt-1 flex flex-wrap gap-0.5 border-t border-white/10 pt-1">
+              {player.hand.map((c) => (
+                <CardFace key={c.id} card={c} size="chip" onHover={cardHover(c)} />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 형제끼리 key가 겹치면 안쪽 상자의 key가 바뀔 때(피해 흔들림) React가 둘 다 새로 만들어

@@ -34,16 +34,17 @@ body {
   60% { transform: translate(3px, -1px) rotate(0.5deg); }
   100% { transform: translate(0, 0); }
 }
+/* 흔들림과 붉은 섬광을 한 선언에 — 클래스를 둘로 나누면 뒤에 오는 animation이 앞을 덮어써
+   흔들림이 한 번도 나오지 않았다 */
 .anim-hit {
-  animation: bang-hit 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+  animation:
+    bang-hit 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97),
+    bang-flash-red 0.6s ease-out;
 }
 
 @keyframes bang-flash-red {
   0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
   20% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.9), 0 0 32px 6px rgba(239, 68, 68, 0.5); }
-}
-.anim-flash-hit {
-  animation: bang-flash-red 0.6s ease-out;
 }
 
 @keyframes bang-flash-green {
@@ -214,7 +215,6 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .anim-hit,
-  .anim-flash-hit,
   .anim-flash-heal,
   .anim-death,
   .anim-active,
