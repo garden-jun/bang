@@ -91,6 +91,9 @@ async function measure(coldInstance: boolean): Promise<number> {
   const start = Date.now();
   const nextPoll = sessions.map(() => start);
   const versions: (number | null)[] = sessions.map(() => null);
+  // 304에는 pollMs가 없다. 클라이언트(useRoom)는 마지막으로 받은 값을 계속 쓰므로 여기서도 그렇게 한다 —
+  // 고정값으로 되돌리면 폴링 간격을 바꿔도 사용량이 안 움직여서 측정이 무의미해진다.
+  const polls = sessions.map(() => 2000);
   const DURATION_MS = 60_000;
 
   while (Date.now() - start < DURATION_MS) {
@@ -101,8 +104,11 @@ async function measure(coldInstance: boolean): Promise<number> {
       if (nextPoll[i] > Date.now()) continue;
       if (coldInstance) g.__bangRoomCache?.clear();
       const v = await getState(sessions[i], room.code, versions[i]);
-      if (v) versions[i] = v.version;
-      nextPoll[i] = Date.now() + (v?.pollMs ?? 2000);
+      if (v) {
+        versions[i] = v.version;
+        polls[i] = v.pollMs;
+      }
+      nextPoll[i] = Date.now() + polls[i];
     }
   }
 
@@ -124,5 +130,7 @@ test("7인 게임 폴링 커맨드 사용량 — 캐시 전부 실패 (최악)",
   const perSecond = await measure(true);
   report("캐시 전부 실패", perSecond);
   // 개선 전 기준선은 초당 약 23개였다. 회귀하면 여기서 걸린다.
-  expect(perSecond).toBeLessThan(8);
+  // 폴링을 당기면(게임 중 2000 -> 800ms) 6.5 -> 11.3으로 오른다. 실제로는 인스턴스가
+  // 재사용돼 위 "캐시 적중"에 가깝고, 사람 수에 비례하므로 2~4인 판은 훨씬 싸다.
+  expect(perSecond).toBeLessThan(13);
 });

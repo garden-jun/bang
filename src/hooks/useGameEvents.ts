@@ -27,6 +27,15 @@ const MIN_STEP_MS = 630;
  * 흘려보내고 마지막 한 장면(= 나에게 벌어진 일)만 제 속도로 보여준다.
  */
 const CATCH_UP_MS = 180;
+/**
+ * 마지막 장면을 보여준 뒤 최소한 이만큼은 지나야 다음 장면으로 넘어간다.
+ *
+ * 큐가 빈 뒤에도 pump는 STEP_MS 뒤에 한 번 더 깨어나 말풍선을 지운다. 그 잔여 대기 중에
+ * 새 사건이 도착하면 아무 이유 없이 최대 STEP_MS를 더 기다리게 되는데, 사람끼리 하는 판은
+ * 사건이 몇 초 간격으로 띄엄띄엄 와서 거의 매번 여기에 걸렸다. 그럴 때는 잔여 대기를
+ * 버리고 이 간격만 지킨다 — 봇이 연달아 둘 때의 큐 속도(STEP_MS/MIN_STEP_MS)는 그대로다.
+ */
+const NEW_BEAT_GAP_MS = MIN_STEP_MS;
 
 /** 테이블 위에 그릴 화살표 — 공격자에서 대상(들)로 */
 export interface ArrowEvent {
@@ -62,6 +71,8 @@ export function useGameEvents(view: RoomView | null) {
   const iActNow = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const effectKey = useRef(0);
+  /** 마지막으로 장면을 보여준 시각 — 새 사건이 잔여 대기를 건너뛸 때 쓴다 */
+  const lastBeatAt = useRef(0);
 
   const game: GameView | undefined = view?.game;
 
@@ -95,6 +106,9 @@ export function useGameEvents(view: RoomView | null) {
     if (fresh.length > 0) lastLogT.current = fresh.at(-1)!.t;
 
     const hasEffects = Object.keys(effects).length > 0;
+    // 큐는 비었는데 타이머만 남았다면 = 직전 장면의 잔여 대기. 여기에 새 사건이 붙으면
+    // 그 대기를 이어받을 이유가 없다 (아래에서 다시 건다).
+    const onlyTailWait = queue.current.length === 0 && timer.current !== null;
     if (fresh.length === 0) {
       if (hasEffects) queue.current.push({ msg: null, effects });
     } else {
@@ -117,6 +131,9 @@ export function useGameEvents(view: RoomView | null) {
     // setState는 타이머 콜백에서만 — 이펙트 본문에서 바로 부르면 연쇄 렌더가 된다
     if (!timer.current && queue.current.length > 0) {
       timer.current = setTimeout(pump, 0);
+    } else if (onlyTailWait && queue.current.length > 0) {
+      clearTimeout(timer.current!);
+      timer.current = setTimeout(pump, Math.max(0, NEW_BEAT_GAP_MS - (Date.now() - lastBeatAt.current)));
     }
 
     function pump() {
@@ -126,6 +143,7 @@ export function useGameEvents(view: RoomView | null) {
         setMessage(null);
         return;
       }
+      lastBeatAt.current = Date.now();
       setMessage(next.msg);
       // 화살표는 다음 화살표가 올 때까지 둔다 — 사라지는 건 CSS 애니메이션이 맡는다.
       // 여기서 지우면 뒤따르는 "피해 1" 사건이 0.9초 만에 선을 끊어 버린다.

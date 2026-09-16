@@ -57,13 +57,15 @@ export function toRoomView(room: RoomState, session: Session, now: number): Room
       )
     : undefined;
 
-  // 지금 행동할 사람만 빠르게 본다. 나머지는 느려도 체감 차이가 없다.
+  // 사람끼리 하는 판에서는 "남이 한 수"가 폴링 간격만큼 늦게 도착한다 — 체감 지연을
+  // 지배하는 건 이 값이다. 내 액션은 응답에 최신 뷰가 실려 오므로 영향받지 않는다.
   // 단, 봇 차례에는 사람이 구경만 하므로 봇이 두는 속도(BOT_MIN_MOVE_MS, 기본 1650)에 맞춘다 —
-  // 더 느리면 여러 수가 한 번에 몰려 와서 무슨 일이 있었는지 못 본다.
-  let pollMs = 3000;
+  // 여기만 빨리 당기면 같은 상태를 헛되이 다시 받을 뿐이고, 더 느리면 여러 수가 한 번에
+  // 몰려 와서 무슨 일이 있었는지 못 본다.
+  let pollMs = 2000;
   if (room.status === "playing" && game) {
-    if (game.responder === session.playerId) pollMs = 1000;
-    else pollMs = room.players.find((p) => p.id === game.responder)?.isBot ? 1800 : 2000;
+    if (game.responder === session.playerId) pollMs = 700;
+    else pollMs = room.players.find((p) => p.id === game.responder)?.isBot ? 1800 : 800;
   }
 
   return {
