@@ -204,13 +204,15 @@ body {
   animation: bang-explode 1100ms ease-out forwards;
 }
 
-/* 다이너마이트 도화선 불꽃 — 들고 있는 동안 계속 */
-@keyframes bang-fuse {
-  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 4px 2px rgba(253, 224, 71, 0.9); }
-  50% { opacity: 0.4; transform: scale(0.6); box-shadow: 0 0 2px 1px rgba(253, 224, 71, 0.4); }
+/* 다이너마이트 도화선 불꽃 — 들고 있는 동안 계속 (SVG 안이라 box-shadow 대신 크기와 투명도만) */
+@keyframes bang-spark {
+  0%, 100% { opacity: 1; transform: scale(1.15) rotate(0deg); }
+  50% { opacity: 0.55; transform: scale(0.7) rotate(20deg); }
 }
-.anim-fuse {
-  animation: bang-fuse 0.5s ease-in-out infinite;
+.dyn-lit .dyn-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bang-spark 0.45s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -231,7 +233,7 @@ body {
   .anim-stamp,
   .anim-bars-fall,
   .anim-explode,
-  .anim-fuse {
+  .dyn-lit .dyn-spark {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
   }

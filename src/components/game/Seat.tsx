@@ -167,11 +167,11 @@ export function Seat({
 
           {dynamite && (
             <div
-              className="absolute -right-1.5 -top-2 z-20 flex h-5 w-5 items-center justify-center rounded-full bg-orange-600 text-white shadow ring-1 ring-black/40"
+              // 빨간 다발과 검은 띠가 둘 다 읽히도록 카드처럼 밝은 바탕, 경고색은 테두리로
+              className="dyn-lit absolute -right-2.5 -top-3 z-20 flex h-7 w-7 items-center justify-center rounded-full bg-amber-50 text-stone-800 shadow ring-2 ring-orange-500"
               title="다이너마이트 — 턴 시작에 ♠2~9가 나오면 폭발(생명 -3, 약 15%), 아니면 다음 사람에게 넘어갑니다"
             >
-              <CardIcon name="dynamite" className="h-3 w-3" />
-              <span className="anim-fuse absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-yellow-300" />
+              <CardIcon name="dynamite" className="h-5 w-5" />
             </div>
           )}
 

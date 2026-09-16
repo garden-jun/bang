@@ -6,6 +6,45 @@ import type { Card, CardName } from "@/game/types";
 
 const RANK: Record<number, string> = { 1: "A", 11: "J", 12: "Q", 13: "K" };
 
+/** 카드 이름 글자 크기 (px): 기본값과, 폭에 맞추느라 줄여도 되는 하한 */
+const NAME_PX = { xs: [8, 6], sm: [10, 7], md: [12, 11], lg: [14, 12] } as const;
+
+/**
+ * 굵은 글씨로 쓴 이름의 대략적인 폭 (em). 실측(Noto Sans KR 굵게)은 한글 0.92, 공백 0.35, ! 0.46 —
+ * OS마다 글꼴이 달라 한글은 조금 넉넉히 잡는다.
+ */
+function nameEm(name: string): number {
+  let em = 0;
+  for (const ch of name) em += /[가-힣]/.test(ch) ? 0.96 : ch === " " ? 0.36 : ch === "!" ? 0.48 : 0.6;
+  return em;
+}
+
+/**
+ * 카드 폭에 맞춰 이름을 그린다. "다이너마이트"는 띄어쓰기가 없어 break-keep으로는 줄이
+ * 안 바뀌고 카드 밖으로 삐져나갔다. 먼저 글자를 폭에 맞게 줄이고(카드 내용 폭 100cqw 기준),
+ * 하한에 걸려도 길면 단어 가운데서만 한 번 줄을 바꾼다 ("다이너/마이트").
+ */
+function CardName({ name, size }: { name: string; size: keyof typeof NAME_PX }) {
+  const [base, min] = NAME_PX[size];
+  const words = name.split(" ").map((w, i, all) => {
+    const cut = w.length >= 5 ? Math.ceil(w.length / 2) : 0;
+    return (
+      <span key={i}>
+        {cut ? <>{w.slice(0, cut)}<wbr />{w.slice(cut)}</> : w}
+        {i < all.length - 1 ? " " : ""}
+      </span>
+    );
+  });
+  return (
+    <span
+      className="w-full break-keep text-center leading-tight"
+      style={{ fontSize: `clamp(${min}px, calc(100cqw / ${nameEm(name).toFixed(2)}), ${base}px)` }}
+    >
+      {words}
+    </span>
+  );
+}
+
 /**
  * 카드 아이콘. 11px 글씨를 읽어야 뱅!과 빗나감!을 구분하던 문제 때문에,
  * 흘끗 봐도 갈라지는 모양을 하나씩 준다.
@@ -44,8 +83,29 @@ export function CardIcon({ name, className = "" }: { name: CardName; className?:
     mustang: <><path d="M6 20V12l3-4 4-3 2 3h3l-2 4v8" {...p} /><path d="M9 20v-4M16 20v-4" {...p} /></>,
     // 창살
     jail: <><rect x="4" y="4" width="16" height="16" rx="1" {...p} /><path d="M9 4v16M15 4v16" {...p} /></>,
-    // 도화선 붙은 다발
-    dynamite: <><rect x="5" y="9" width="12" height="11" rx="1" {...p} /><path d="M11 9V6c0-1.5 1.5-2 2.5-1M17 12h3" {...p} /></>,
+    // 빨간 막대 세 개를 띠로 묶고 도화선에 불이 붙은 다발. 다른 아이콘과 달리 색을 칠한다 —
+    // 선만으로는 네모 상자(감옥과 비슷)로 읽혔다. 윤곽선은 주황 배경 위에서 빨강이 묻히지 않게.
+    // 불꽃(.dyn-spark)은 조상에 .dyn-lit가 있을 때만 깜빡인다 (좌석 배지)
+    dynamite: (
+      <>
+        <g stroke="#1c1917" strokeWidth={1.1} strokeLinejoin="round">
+          <rect x="3" y="12" width="5.2" height="10" rx="1.3" fill="#dc2626" />
+          <rect x="15.8" y="12" width="5.2" height="10" rx="1.3" fill="#dc2626" />
+          <rect x="9.2" y="10" width="5.6" height="12" rx="1.3" fill="#ef4444" />
+        </g>
+        <rect x="2.4" y="15.3" width="19.2" height="2.4" rx=".5" fill="#1c1917" />
+        <path d="M12 10c0-2.6.8-4 2.6-4.3 1.6-.3 2.3-1 2.4-2.2" {...p} />
+        <g className="dyn-spark">
+          <circle cx="17.6" cy="3.7" r="1.1" fill="#fff7cc" />
+          <path
+            d="M17.6 1.2v1.4M17.6 4.8v1.4M14.8 3.7h1.4M19 3.7h1.4M15.8 1.9l.9.9M18.5 4.6l.9.9M19.4 1.9l-.9.9M16.7 4.6l-.9.9"
+            stroke="#fde047"
+            strokeWidth={1.3}
+            strokeLinecap="round"
+          />
+        </g>
+      </>
+    ),
     // 무기 — 총열 길이로 사거리를 암시
     volcanic: <><path d="M4 11h9v4H6z" {...p} /><path d="M13 12h3" {...p} /></>,
     schofield: <><path d="M4 11h11v4H6z" {...p} /><path d="M15 12h3" {...p} /></>,
@@ -118,7 +178,7 @@ export function CardFace({
       onClick={onClick}
       onMouseEnter={onHover ? () => onHover(true) : undefined}
       onMouseLeave={onHover ? () => onHover(false) : undefined}
-      className={`relative flex ${dims} shrink-0 flex-col items-center justify-between rounded-lg border-2 font-bold shadow-md transition-transform
+      className={`@container relative flex ${dims} shrink-0 flex-col items-center justify-between rounded-lg border-2 font-bold shadow-md transition-transform
         ${tone}
         ${ghost ? "border-dashed opacity-60 saturate-[0.6]" : ""}
         ${selected ? "-translate-y-3 ring-4 ring-amber-400" : ""}
@@ -128,8 +188,9 @@ export function CardFace({
       <span className={`self-start leading-none ${nameSize} ${red ? "text-red-600" : "text-black/70"}`}>
         {ghost ? "능력" : `${SUIT_SYMBOL[card.suit]}${RANK[card.rank] ?? card.rank}`}
       </span>
-      <CardIcon name={card.name} className={`${icon} opacity-80`} />
-      {size === "chip" ? <span /> : <span className={`w-full break-keep text-center leading-tight ${nameSize}`}>{info.name}</span>}
+      {/* 선 아이콘은 살짝 눌러 글씨보다 튀지 않게. 색을 칠한 다이너마이트는 그러면 분홍으로 바랜다 */}
+      <CardIcon name={card.name} className={`${icon} ${card.name === "dynamite" ? "" : "opacity-80"}`} />
+      {size === "chip" ? <span /> : <CardName name={info.name} size={size} />}
     </button>
   );
 }
