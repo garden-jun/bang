@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyAction } from "../engine";
-import { describeSituation, explainCard, explainSeat } from "../help";
+import { describeSituation, explainCard, explainSeat, missedNote } from "../help";
 import { toView } from "../view";
 import { playReason, targetReason, viewDistance } from "../viewRules";
 import { NOW, card, makeState, p } from "./util";
@@ -129,5 +129,55 @@ describe("좌석 설명", () => {
     const h = explainSeat(v, me, v.players.find((x) => x.id === "o2")!);
     expect(h.now).toBe("거리 2 (상대 머스탱 +1, 내 조준경 -1) — 내 사거리(5) 안, 뱅!을 쏠 수 있습니다");
     expect(h.body).toContain("윌리 더 키드");
+  });
+});
+
+describe("빗나감! 장수", () => {
+  it("슬랩 더 킬러의 뱅!은 2장이 필요하고, 왜인지 말한다", () => {
+    const bang = card("bang");
+    const st = four();
+    p(st, "s").character = "slabTheKiller";
+    p(st, "s").hand = [bang];
+    const after = applyAction(st, "s", { type: "play", cardId: bang.id, targetId: "o1" }, NOW);
+    const top = after.pending[after.pending.length - 1];
+    expect(top.kind === "bang" && top.missedNeeded).toBe(2);
+    const v = asPlayer(after, "o1");
+    expect(describeSituation(v)).toContain("빗나감! 2장");
+    expect(describeSituation(v)).toContain("슬랩 더 킬러의 뱅!이라 2장이 필요합니다");
+  });
+
+  it("술통이 1장을 막으면 필요 장수가 1로 줄고 그 이유도 바뀐다", () => {
+    const bang = card("bang");
+    const st = four();
+    p(st, "s").character = "slabTheKiller";
+    p(st, "s").hand = [bang];
+    p(st, "o1").equipment = [card("barrel")];
+    st.deck = [card("beer", "H", 6)]; // 술통 판정 성공
+    const after = applyAction(st, "s", { type: "play", cardId: bang.id, targetId: "o1" }, NOW);
+    const top = after.pending[after.pending.length - 1];
+    expect(top.kind === "bang" && top.missedNeeded).toBe(1);
+    expect(missedNote(asPlayer(after, "o1"), "s", 1)).toContain("술통이 1장을 막아줘서");
+  });
+
+  it("평범한 뱅!에는 이유를 붙이지 않는다", () => {
+    const bang = card("bang");
+    const st = four();
+    p(st, "s").hand = [bang];
+    const v = asPlayer(applyAction(st, "s", { type: "play", cardId: bang.id, targetId: "o1" }, NOW), "o1");
+    expect(describeSituation(v)).toBe("S이(가) O1에게 뱅! — O1은(는) 빗나감! 1장으로 막거나 피해 1");
+    expect(missedNote(v, "s", 1)).toBeNull();
+  });
+
+  // 슬랩의 능력은 뱅! 카드에만 붙는다 — 개틀링은 원래대로 1장
+  it("슬랩 더 킬러라도 개틀링은 빗나감! 1장으로 막힌다", () => {
+    const gat = card("gatling");
+    const missed = card("missed");
+    const st = four();
+    p(st, "s").character = "slabTheKiller";
+    p(st, "s").hand = [gat];
+    p(st, "o1").hand = [missed];
+    const a = applyAction(st, "s", { type: "play", cardId: gat.id }, NOW);
+    const b = applyAction(a, "o1", { type: "respond", cardIds: [missed.id] }, NOW);
+    expect(p(b, "o1").hp).toBe(p(st, "o1").hp);
   });
 });

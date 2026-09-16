@@ -51,6 +51,20 @@ const CHARACTER_DRAW_NOTE: Partial<Record<CharacterName, string>> = {
   pedroRamirez: "첫 장을 버림 더미에서 가져올 수 있음",
 };
 
+/**
+ * 빗나감!이 왜 그 장수만큼 필요한지. 평범한 뱅!(1장)이면 null.
+ *
+ * 술통 판정이 먼저 일어나 필요 장수를 깎기 때문에, 슬랩 더 킬러의 뱅!인데도
+ * 1장만 필요한 상황이 생긴다. 숫자만 보여주면 그때가 제일 헷갈린다.
+ */
+export function missedNote(game: GameView, fromId: string, need: number): string | null {
+  const attacker = game.players.find((p) => p.id === fromId);
+  if (attacker?.character !== "slabTheKiller") return null;
+  return need >= 2
+    ? "슬랩 더 킬러의 뱅!이라 2장이 필요합니다"
+    : "슬랩 더 킬러의 뱅!이지만 술통이 1장을 막아줘서 1장만 필요합니다";
+}
+
 /** 지금 무슨 일이 벌어지고 있는지 한 문장 */
 export function describeSituation(game: GameView): string {
   const n = (id: string) => game.names[id] ?? id;
@@ -58,8 +72,10 @@ export function describeSituation(game: GameView): string {
   const top = game.pending[game.pending.length - 1];
   if (top) {
     switch (top.kind) {
-      case "bang":
-        return `${n(top.from)}이(가) ${n(top.to)}에게 뱅! — ${n(top.to)}은(는) 빗나감! ${top.missedNeeded}장으로 막거나 피해 1`;
+      case "bang": {
+        const why = missedNote(game, top.from, top.missedNeeded);
+        return `${n(top.from)}이(가) ${n(top.to)}에게 뱅! — ${n(top.to)}은(는) 빗나감! ${top.missedNeeded}장으로 막거나 피해 1${why ? ` (${why})` : ""}`;
+      }
       case "gatling":
         return `${n(top.from)}의 개틀링 — ${n(top.targets[0])} 차례: 빗나감!을 내거나 피해 1 (남은 대상 ${top.targets.length}명)`;
       case "indians":

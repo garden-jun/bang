@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui";
-import { describeSituation, explainCard, explainRole, explainSeat, type HelpText } from "@/game/help";
+import { describeSituation, explainCard, explainRole, explainSeat, missedNote, type HelpText } from "@/game/help";
 import { CARD_KO, CHARACTER_KO, ROLE_KO, cardLabel } from "@/game/i18n";
 import type { Action, Card, CardName } from "@/game/types";
 import type { GameView, PlayerView } from "@/game/view";
@@ -440,8 +440,9 @@ function buildPrompt(
       case "gatling": {
         const cards = has("missed");
         const need = top.kind === "bang" ? top.missedNeeded : 1;
+        const why = top.kind === "bang" ? missedNote(game, top.from, need) : null;
         return box(
-          `${game.names[top.from]}의 ${top.kind === "bang" ? "뱅!" : "개틀링"} — 빗나감! ${need}장으로 막을 수 있습니다`,
+          `${game.names[top.from]}의 ${top.kind === "bang" ? "뱅!" : "개틀링"} — 빗나감! ${need}장으로 막을 수 있습니다${why ? ` · ${why}` : ""}`,
           <>
             {mode.kind === "multi" && mode.purpose === "respond" ? (
               <>
