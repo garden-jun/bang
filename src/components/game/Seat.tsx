@@ -82,6 +82,8 @@ export function Seat({
   return (
     <div
       key={effect?.key}
+      // 손패에서 날아가는 카드가 이 좌석을 도착지로 찾는다 (FlyAway)
+      data-seat={player.id}
       onClick={targetable ? onTarget : undefined}
       onMouseEnter={onHover ? () => onHover(true) : undefined}
       onMouseLeave={onHover ? () => onHover(false) : undefined}
@@ -133,7 +135,7 @@ export function Seat({
       )}
 
       {(player.equipment.length > 0 || innate) && (
-        <div className="mt-1 flex flex-wrap gap-0.5">
+        <div className="mt-1 flex flex-wrap gap-0.5" data-equip={player.id}>
           {player.equipment.map((c) => (
             <CardFace key={c.id} card={c} size="xs" onHover={cardHover(c)} />
           ))}

@@ -21,10 +21,13 @@ let dealSlot = 0;
  * 우르르 날아오지 않게 건너뛴다.
  */
 export function DealIn({
+  cardId,
   from,
   ready,
   children,
 }: {
+  /** 사라질 때 이 자리에서 날아가도록 FlyAway가 찾아 쓴다 */
+  cardId: string;
   /** 출발점 (덱). 화면이 좁아 덱이 숨어 있으면 위에서 내려온다 */
   from: RefObject<HTMLElement | null>;
   ready: RefObject<boolean>;
@@ -60,7 +63,7 @@ export function DealIn({
   }, [from, ready]);
 
   return (
-    <div ref={ref} className="inline-flex shrink-0">
+    <div ref={ref} data-card-id={cardId} className="inline-flex shrink-0">
       {children}
     </div>
   );

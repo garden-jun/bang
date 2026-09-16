@@ -105,6 +105,16 @@ body {
   animation: bang-deal 520ms cubic-bezier(0.22, 0.8, 0.3, 1) backwards;
 }
 
+/* 손패에서 버림 더미·좌석으로 날아가는 카드 — 도착지는 FlyAway가 픽셀로 넣어준다 */
+@keyframes bang-fly {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  70% { opacity: 1; }
+  100% { transform: translate(var(--fly-x, 0), var(--fly-y, 0)) scale(var(--fly-s, 0.6)) rotate(5deg); opacity: 0; }
+}
+.anim-fly {
+  animation: bang-fly 460ms cubic-bezier(0.4, 0, 0.35, 1) forwards;
+}
+
 @keyframes bang-toast {
   0% { transform: translateY(-8px); opacity: 0; }
   12%, 82% { transform: translateY(0); opacity: 1; }
@@ -155,6 +165,7 @@ body {
   .anim-urgent,
   .anim-pop,
   .anim-deal,
+  .anim-fly,
   .anim-toast,
   .anim-arrow,
   .anim-arrow-icon,

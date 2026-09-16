@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui";
 import { describeSituation, explainCard, explainRole, explainSeat, missedNote, type HelpText } from "@/game/help";
 import { CARD_KO, CHARACTER_KO, ROLE_KO, cardLabel } from "@/game/i18n";
@@ -11,6 +11,7 @@ import { useGameEvents } from "@/hooks/useGameEvents";
 import type { RoomView } from "@/shared/types";
 import { CardBack, CardFace } from "./CardFace";
 import { DealIn } from "./DealIn";
+import { FlyLayer, useFlyAway } from "./FlyAway";
 import { HelpSheet } from "./HelpSheet";
 import { HelpStrip } from "./HelpStrip";
 import { LogFeed } from "./LogFeed";
@@ -21,6 +22,11 @@ const NEEDS_TARGET: ReadonlySet<CardName> = new Set(["bang", "missed", "panic", 
 const NEEDS_TARGET_CARD: ReadonlySet<CardName> = new Set(["panic", "catBalou"]);
 
 const HELP_KEY = "bang.help";
+
+/** 날아간 카드가 도착지에서 갖는 크기 — 손패 카드(md) 대비. 좌석 장비 줄은 xs, 버림 더미는 sm */
+const TO_EQUIP = 0.47;
+const TO_DISCARD = 0.65;
+const seatEl = (id: string) => document.querySelector<HTMLElement>(`[data-seat="${id}"]`);
 
 function readHelpOn(): boolean {
   try {
@@ -67,6 +73,35 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
   useEffect(() => {
     dealReady.current = true;
   }, []);
+
+  /** 카드가 날아갈 도착지 — 앞에 깔리는 카드는 그 사람 좌석으로, 나머지는 버림 더미로 */
+  const discardRef = useRef<HTMLDivElement>(null);
+  const handRef = useRef<HTMLDivElement>(null);
+  /**
+   * 직전 폴링까지 본 로그 시각. 봇이 연달아 두면 여러 사건이 폴링 한 번에 몰려오므로
+   * "몇 초 안에 일어난 일"로는 방금 일을 가려낼 수 없다 — 이번에 새로 온 것만 본다.
+   * 이 이펙트는 카드를 날리는 레이아웃 이펙트보다 뒤에 돌아서, 날릴 때는 아직 지난 값이다.
+   */
+  const seenLogT = useRef(-1);
+  useEffect(() => {
+    seenLogT.current = game.log.at(-1)?.t ?? -1;
+  }, [game.log]);
+
+  const destFor = useCallback(
+    (card: Card) => {
+      const owner = game.players.find((p) => p.equipment.some((c) => c.id === card.id));
+      if (owner) {
+        const row = document.querySelector<HTMLElement>(`[data-equip="${owner.id}"]`);
+        return { el: row ?? seatEl(owner.id), scale: TO_EQUIP };
+      }
+      // 뺏긴 카드는 버려진 게 아니라 저 사람 손패로 간다 — 손패는 내 화면에 없으니 좌석으로 보낸다
+      const steal = game.log.find((l) => l.t > seenLogT.current && l.meta?.kind === "panic" && l.meta.to === meId);
+      if (steal?.meta) return { el: seatEl(steal.meta.from), scale: TO_EQUIP };
+      return { el: discardRef.current, scale: TO_DISCARD };
+    },
+    [game.players, game.log, meId],
+  );
+  const flyLayer = useFlyAway(handRef, me?.hand ?? [], dealReady, destFor);
 
   // ---------- 도움말 ----------
   // 이 컴포넌트는 폴링 결과가 온 뒤 클라이언트에서만 붙으므로 초기값에서 브라우저를 읽어도 된다
@@ -260,13 +295,17 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
                     <CardBack size="sm" count={game.deckCount} />
                     <span className="mt-0.5 block text-[9px] text-white/40">덱</span>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center" ref={discardRef}>
                     {game.discardTop ? (
-                      <CardFace
-                        card={game.discardTop}
-                        size="sm"
-                        onHover={helpOn ? (on) => setFocus(on ? { kind: "card", card: game.discardTop!, plain: true } : null) : undefined}
-                      />
+                      // key로 카드가 바뀔 때마다 다시 붙게 해서 얹히는 연출을 건다 —
+                      // 남이 낸 카드는 내 화면에 출발점이 없어서 이게 유일한 신호다
+                      <div key={game.discardTop.id} className="anim-pop">
+                        <CardFace
+                          card={game.discardTop}
+                          size="sm"
+                          onHover={helpOn ? (on) => setFocus(on ? { kind: "card", card: game.discardTop!, plain: true } : null) : undefined}
+                        />
+                      </div>
                     ) : (
                       <div className="h-16 w-11 rounded-lg border-2 border-dashed border-white/15" />
                     )}
@@ -371,11 +410,11 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
                 )}
                 {!me.alive && <span className="shrink-0 text-red-400">사망</span>}
               </div>
-              <div className="flex flex-wrap items-end gap-1.5 sm:gap-2" data-testid="hand">
+              <div className="flex flex-wrap items-end gap-1.5 sm:gap-2" data-testid="hand" ref={handRef}>
                 {(me.hand ?? []).map((c) => {
                   const selecting = mode.kind === "multi";
                   return (
-                    <DealIn key={c.id} from={deckRef} ready={dealReady}>
+                    <DealIn key={c.id} cardId={c.id} from={deckRef} ready={dealReady}>
                       <CardFace
                         card={c}
                         size="md"
@@ -406,6 +445,8 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
           <LogFeed log={game.log} />
         </aside>
       </div>
+
+      <FlyLayer layer={flyLayer} />
 
       {sheet && (
         <HelpSheet
