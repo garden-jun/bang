@@ -20,6 +20,13 @@ const ARROW_COLOR: Record<ArrowEvent["kind"], string> = {
   catBalou: "#eab308",
   jail: "#9ca3af",
 };
+/**
+ * 겹친 좌석 사이에서도 방향이 읽히려면 선이 이만큼은 남아야 한다.
+ * 곡선 중앙에 카드 아이콘(28px)이 얹히므로, 짧으면 아이콘이 선을 통째로 덮는다 —
+ * 아이콘 양옆으로 선이 보일 만큼은 확보한다.
+ */
+const MIN_LINE = 84;
+
 const ARROW_CARD: Record<ArrowEvent["kind"], CardName> = {
   bang: "bang",
   gatling: "gatling",
@@ -87,15 +94,28 @@ function ArrowLayer({
           const len = Math.hypot(dx, dy) || 1;
           const ux = dx / len,
             uy = dy / len;
-          // 상자 경계 조금 바깥에서 출발해 상대 경계 조금 앞에서 멈춘다
-          const s0 = Math.min(len * 0.45, exitDist(from, ux, uy) + 4);
-          const e0 = Math.min(len * 0.45, exitDist(to, ux, uy) + 6);
+          // 상자 경계 조금 바깥에서 출발해 상대 경계 조금 앞에서 멈춘다.
+          //
+          // 그런데 좌석이 겹치거나 바로 옆에 붙어 있으면(6~7인) 양쪽 여백만으로 길이를
+          // 거의 다 먹어, 화살촉만 덩그러니 남은 토막이 된다. 선이 최소 이만큼은 남도록
+          // 여백을 같은 비율로 줄인다. 아주 겹친 경우(spare<=0)에는 여백 없이 중심에서
+          // 중심으로 긋는다 — 상자를 가로지르더라도 위에 그리므로 보인다.
+          let s0 = exitDist(from, ux, uy) + 4;
+          let e0 = exitDist(to, ux, uy) + 6;
+          const spare = len - MIN_LINE;
+          if (s0 + e0 > spare) {
+            const k = Math.max(0, spare) / (s0 + e0);
+            s0 *= k;
+            e0 *= k;
+          }
           const sx = from.cx + ux * s0,
             sy = from.cy + uy * s0;
           const ex = to.cx - ux * e0,
             ey = to.cy - uy * e0;
-          // 살짝 휘어진 곡선 — 직선은 좌석 사이를 지날 때 다른 좌석을 가로지른다
-          const bend = Math.min(50, len * 0.12);
+          // 살짝 휘어진 곡선 — 직선은 좌석 사이를 지날 때 다른 좌석을 가로지른다.
+          // 좌석이 겹치거나 세로로 붙어 있으면(6~7인) 거리가 짧아 곡선이 상자 사이에
+          // 파묻힌다. 짧을수록 더 크게 휘어 빈 공간으로 빼낸다.
+          const bend = Math.max(26, Math.min(50, len * 0.12));
           const cx = (sx + ex) / 2 - uy * bend,
             cy = (sy + ey) / 2 + ux * bend;
           // 아이콘은 곡선 위 중간점
@@ -107,7 +127,8 @@ function ArrowLayer({
 
   // 바깥 div는 고정(측정 기준) — key로 갈아끼우면 다음 화살표가 그려지지 않았다. 안쪽만 교체해 애니메이션을 다시 건다.
   return (
-    <div ref={ref} className="pointer-events-none absolute inset-0 z-[15]">
+    // 좌석(z-20) 위, 토스트(z-30) 아래. 아래에 깔았더니 상자가 겹칠 때 통째로 가려졌다.
+    <div ref={ref} className="pointer-events-none absolute inset-0 z-[25]">
       <div key={arrow.key} className="absolute inset-0">
         {paths.length > 0 && (
           <svg className="h-full w-full overflow-visible">
@@ -122,22 +143,39 @@ function ArrowLayer({
                 orient="auto"
                 markerUnits="strokeWidth"
               >
-                <path d="M 0 0 L 10 5 L 0 10 z" fill={color} />
+                <path
+                  d="M 0 0 L 10 5 L 0 10 z"
+                  fill={color}
+                  stroke="rgba(0,0,0,0.8)"
+                  strokeWidth={1.5}
+                  strokeLinejoin="round"
+                />
               </marker>
             </defs>
             {paths.map((p) => (
-              <path
-                key={p.i}
-                d={p.d}
-                fill="none"
-                stroke={color}
-                strokeWidth={3}
-                strokeLinecap="round"
-                pathLength={1}
-                markerEnd={`url(#ah-${arrow.key})`}
-                className="anim-arrow"
-                style={{ filter: `drop-shadow(0 0 3px ${color})` }}
-              />
+              <g key={p.i}>
+                {/* 어두운 테두리를 먼저 깔아야 밝은 좌석 상자 위에서도 선이 읽힌다 */}
+                <path
+                  d={p.d}
+                  fill="none"
+                  stroke="rgba(0,0,0,0.8)"
+                  strokeWidth={7}
+                  strokeLinecap="round"
+                  pathLength={1}
+                  className="anim-arrow"
+                />
+                <path
+                  d={p.d}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth={3.5}
+                  strokeLinecap="round"
+                  pathLength={1}
+                  markerEnd={`url(#ah-${arrow.key})`}
+                  className="anim-arrow"
+                  style={{ filter: `drop-shadow(0 0 5px ${color})` }}
+                />
+              </g>
             ))}
           </svg>
         )}

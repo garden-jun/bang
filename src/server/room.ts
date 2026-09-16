@@ -7,6 +7,17 @@ const LOCK_TTL_MS = 3000;
 const PUBLIC_LIST = "rooms:public";
 
 /**
+ * 접속 중인 사람이 아무도 없는 채로 이 시간이 지나면 방을 닫는다.
+ *
+ * 탭을 닫고 떠난 방이 TTL 6시간 동안 로비에 남아 있었다. 들어가 봐야 방장이 없어
+ * 시작도 못 하는 방이라, 목록만 지저분해진다.
+ *
+ * 사람 1명이 봇과 플레이 중인 방은 지워지면 안 된다 — 그 사람이 폴링하는 한
+ * `lastSeen`이 계속 갱신되므로 여기에 걸리지 않는다.
+ */
+const ABANDONED_MS = 10 * 60 * 1000;
+
+/**
  * 같은 서버 인스턴스로 몰리는 폴링을 흡수하는 초단기 캐시.
  * 폴링 간격(2초)보다 훨씬 짧아, 최악의 경우에도 한 프레임 늦게 보일 뿐이다.
  * 락 안에서는 절대 쓰지 않는다 — 덮어쓰기가 난다.
@@ -68,6 +79,13 @@ export async function requireRoom(code: string, fresh = false): Promise<RoomStat
 
 const isListed = (r: RoomState) => r.settings.isPublic && r.status !== "finished";
 
+/** 사람이 아무도 안 보고 있는 방인가 (봇은 폴링하지 않으므로 세지 않는다) */
+function isAbandoned(room: RoomState, now: number): boolean {
+  const humans = [...room.players, ...room.spectators].filter((m) => !m.isBot);
+  if (humans.length === 0) return true;
+  return now - Math.max(...humans.map((m) => m.lastSeen)) > ABANDONED_MS;
+}
+
 /** 저장한다 (version은 호출자가 관리). 공개 목록도 동기화. */
 export async function saveRoom(room: RoomState, now: number): Promise<RoomState> {
   room.updatedAt = now;
@@ -101,10 +119,19 @@ export async function listPublicRooms(limit = 30): Promise<RoomState[]> {
   if (codes.length === 0) return [];
   const rooms = await store.mget<RoomState>(codes.map(roomKey));
   const out: RoomState[] = [];
+  const now = Date.now();
   for (let i = 0; i < codes.length; i++) {
     const r = rooms[i];
-    if (r && r.settings.isPublic && r.status !== "finished") out.push(r);
-    else await store.zrem(PUBLIC_LIST, codes[i]); // 만료/비공개 정리
+    if (!r || !isListed(r)) {
+      await store.zrem(PUBLIC_LIST, codes[i]); // 만료/비공개 정리
+      continue;
+    }
+    // 상주 프로세스가 없으니 로비를 여는 순간이 곧 청소 시점이다
+    if (isAbandoned(r, now)) {
+      await deleteRoom(r.code);
+      continue;
+    }
+    out.push(r);
   }
   return out;
 }
