@@ -109,7 +109,10 @@ export function CardFace({
       // disabled 속성을 쓰면 hover/tap 이벤트가 죽어 "왜 못 내는지" 설명을 띄울 수 없다.
       // 클릭은 그대로 올리고(게임판이 낼 수 없는 카드를 무시한다) 모양으로만 표시한다.
       aria-disabled={disabled || undefined}
-      disabled={!onClick}
+      // 같은 이유로, 누를 일이 없어도 설명을 띄워야 하면 disabled를 걸지 않는다.
+      // 대신 탭 순서에서는 빼 둔다 — 남의 장착 카드까지 키보드로 짚고 다닐 일은 없다.
+      disabled={!onClick && !onHover}
+      tabIndex={onClick ? undefined : -1}
       onClick={onClick}
       onMouseEnter={onHover ? () => onHover(true) : undefined}
       onMouseLeave={onHover ? () => onHover(false) : undefined}
