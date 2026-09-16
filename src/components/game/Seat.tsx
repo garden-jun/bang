@@ -1,9 +1,19 @@
 "use client";
 
 import { CHARACTER_KO, ROLE_KO } from "@/game/i18n";
+import type { CardName, CharacterName } from "@/game/types";
 import type { PlayerView } from "@/game/view";
 import type { SeatEffect } from "@/hooks/useGameEvents";
 import { CardBack, CardFace } from "./CardFace";
+
+/**
+ * 장착 카드 없이도 늘 가지고 있는 효과. 좌석에 안 보이면 "머스탱도 없는데 왜 거리가 2지?"가 된다.
+ */
+const INNATE: Partial<Record<CharacterName, CardName>> = {
+  paulRegret: "mustang",
+  jourdonnais: "barrel",
+  roseDoolan: "scope",
+};
 
 export function Seat({
   player,
@@ -39,6 +49,7 @@ export function Seat({
 }) {
   const ch = CHARACTER_KO[player.character];
   const dead = !player.alive;
+  const innate = INNATE[player.character];
 
   const anim =
     effect?.kind === "hit" ? "anim-hit anim-flash-hit" : effect?.kind === "heal" ? "anim-flash-heal" : effect?.kind === "death" ? "anim-death" : "";
@@ -105,11 +116,15 @@ export function Seat({
         </div>
       )}
 
-      {player.equipment.length > 0 && (
+      {(player.equipment.length > 0 || innate) && (
         <div className="mt-1 flex flex-wrap gap-0.5">
           {player.equipment.map((c) => (
             <CardFace key={c.id} card={c} size="xs" />
           ))}
+          {/* 같은 이름의 진짜 카드를 이미 장착했으면 중복해서 보여주지 않는다 */}
+          {innate && !player.equipment.some((c) => c.name === innate) && (
+            <CardFace card={{ id: `innate-${player.id}`, name: innate, suit: "S", rank: 1 }} size="xs" ghost />
+          )}
         </div>
       )}
 

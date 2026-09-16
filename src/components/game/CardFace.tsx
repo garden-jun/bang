@@ -66,6 +66,7 @@ export function CardFace({
   selected,
   disabled,
   dimmed,
+  ghost,
   onClick,
   onHover,
   title,
@@ -76,6 +77,8 @@ export function CardFace({
   disabled?: boolean;
   /** 낼 수는 있지만 지금 주목 대상이 아닐 때 (예: 다른 카드를 조준 중) */
   dimmed?: boolean;
+  /** 실제 카드가 아니라 캐릭터가 원래 가진 효과 (폴 리그렛의 머스탱 등) */
+  ghost?: boolean;
   onClick?: () => void;
   onHover?: (on: boolean) => void;
   title?: string;
@@ -97,11 +100,12 @@ export function CardFace({
   const nameSize = { xs: "text-[8px]", sm: "text-[10px]", md: "text-xs", lg: "text-sm" }[size];
   const info = CARD_KO[card.name];
   const interactive = !!onClick && !disabled;
+  const label = ghost ? `${info.name} (캐릭터 능력 — 실제 카드가 아니라 뺏기지 않습니다)` : `${info.name} — ${info.desc}`;
 
   return (
     <button
       type="button"
-      title={title ?? `${info.name} — ${info.desc}`}
+      title={title ?? label}
       // disabled 속성을 쓰면 hover/tap 이벤트가 죽어 "왜 못 내는지" 설명을 띄울 수 없다.
       // 클릭은 그대로 올리고(게임판이 낼 수 없는 카드를 무시한다) 모양으로만 표시한다.
       aria-disabled={disabled || undefined}
@@ -111,13 +115,13 @@ export function CardFace({
       onMouseLeave={onHover ? () => onHover(false) : undefined}
       className={`relative flex ${dims} shrink-0 flex-col items-center justify-between rounded-lg border-2 font-bold shadow-md transition-transform
         ${tone}
+        ${ghost ? "border-dashed opacity-60 saturate-[0.6]" : ""}
         ${selected ? "-translate-y-3 ring-4 ring-amber-400" : ""}
         ${disabled ? "opacity-35 saturate-50" : dimmed ? "opacity-55" : ""}
         ${interactive ? "cursor-pointer hover:-translate-y-2 hover:shadow-xl" : "cursor-default"}`}
     >
       <span className={`self-start leading-none ${nameSize} ${red ? "text-red-600" : "text-black/70"}`}>
-        {SUIT_SYMBOL[card.suit]}
-        {RANK[card.rank] ?? card.rank}
+        {ghost ? "능력" : `${SUIT_SYMBOL[card.suit]}${RANK[card.rank] ?? card.rank}`}
       </span>
       <CardIcon name={card.name} className={`${icon} opacity-80`} />
       <span className={`w-full break-keep text-center leading-tight ${nameSize}`}>{info.name}</span>

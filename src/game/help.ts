@@ -109,9 +109,13 @@ export function explainSeat(game: GameView, me: PlayerView | undefined, p: Playe
   if (!me || me.id === p.id) return { title: name, body };
   const d = viewDistance(game, me.id, p.id);
   const range = weaponRange(me);
+  // 같은 +1이라도 "카드를 장착했다"와 "캐릭터가 원래 그렇다"는 전혀 다른 정보다.
+  // 뭉뚱그리면 장착하지도 않은 머스탱을 찾느라 헤맨다.
   const mods: string[] = [];
-  if (p.equipment.some((c) => c.name === "mustang") || p.character === "paulRegret") mods.push("상대 머스탱 +1");
-  if (me.equipment.some((c) => c.name === "scope") || me.character === "roseDoolan") mods.push("내 조준경 -1");
+  if (p.equipment.some((c) => c.name === "mustang")) mods.push("상대 머스탱 +1");
+  else if (p.character === "paulRegret") mods.push("상대 폴 리그렛 능력 +1");
+  if (me.equipment.some((c) => c.name === "scope")) mods.push("내 조준경 -1");
+  else if (me.character === "roseDoolan") mods.push("내 로즈 둘런 능력 -1");
   const modTxt = mods.length ? ` (${mods.join(", ")})` : "";
   return d <= range
     ? { title: name, body, now: `거리 ${d}${modTxt} — 내 사거리(${range}) 안, 뱅!을 쏠 수 있습니다` }
