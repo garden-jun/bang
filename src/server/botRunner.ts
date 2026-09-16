@@ -12,11 +12,24 @@ import { loadRoom, withRoomLock } from "./room";
 const MAX_MOVES = 24;
 
 /**
+ * ms 환경변수를 읽는다. 비었거나 숫자가 아니면 기본값 — `0`이라고 **명시**했을 때만 0이다.
+ *
+ * 예전엔 `Number(env ?? 기본값)`이었는데, .env.example의 `BOT_MIN_MOVE_MS=`를 그대로 옮겨
+ * 빈 값으로 등록하면 `Number("")`가 0이 되어 배포 환경에서 봇 기다림이 통째로 꺼졌다.
+ */
+export function envMs(raw: string | undefined, fallback: number): number {
+  const s = raw?.trim();
+  if (!s) return fallback;
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+/**
  * 봇의 한 수 사이 최소 간격. 실제 간격은 직전 수의 연출 길이(holdBots)와 이것 중 긴 쪽이다.
  *
  * BOT_MIN_MOVE_MS로 조절한다 (0이면 기다리지 않는다 — 테스트용).
  */
-const MIN_MOVE_MS = Number(process.env.BOT_MIN_MOVE_MS ?? 1650);
+const MIN_MOVE_MS = envMs(process.env.BOT_MIN_MOVE_MS, 1650);
 
 /**
  * 상태가 바뀐 뒤 화면에 도착하기까지의 여유. 봇 차례에 구경하는 사람의 폴링 간격이

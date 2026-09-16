@@ -47,6 +47,17 @@ async function toBotTurn() {
   return { me, code };
 }
 
+test("BOT_MIN_MOVE_MS가 비었거나 이상하면 기본값 — 0은 명시했을 때만", async () => {
+  const { envMs } = await import("../botRunner");
+  expect(envMs(undefined, 1650)).toBe(1650);
+  expect(envMs("", 1650)).toBe(1650); // .env.example을 그대로 옮긴 경우
+  expect(envMs("  ", 1650)).toBe(1650);
+  expect(envMs("abc", 1650)).toBe(1650);
+  expect(envMs("-5", 1650)).toBe(1650);
+  expect(envMs("0", 1650)).toBe(0);
+  expect(envMs("2000", 1650)).toBe(2000);
+});
+
 test("수를 두면 연출이 끝날 때까지 봇을 붙잡는다", async () => {
   const { me, code } = await toBotTurn();
   const { loadRoom } = await import("../room");
