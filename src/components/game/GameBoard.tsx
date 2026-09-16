@@ -54,7 +54,9 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
   // ---------- 도움말 ----------
   // 이 컴포넌트는 폴링 결과가 온 뒤 클라이언트에서만 붙으므로 초기값에서 브라우저를 읽어도 된다
   const [helpOn, setHelpOn] = useState(() => readHelpOn());
-  const [isTouch] = useState(() => typeof window !== "undefined" && window.matchMedia("(hover: none)").matches);
+  const [isTouch] = useState(
+    () => typeof window !== "undefined" && (window.matchMedia("(hover: none)").matches || window.matchMedia("(pointer: coarse)").matches),
+  );
   // 판이 시작될 때(이 컴포넌트가 붙을 때) 한 번: 내 역할과 규칙
   const [sheet, setSheet] = useState<"intro" | "open" | null>(() => (isPlayer && readHelpOn() ? "intro" : null));
   /** 힌트 줄에 설명할 대상 */
@@ -214,11 +216,17 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
         big={urgent}
         label={urgent ? (iRespond && top ? "대응하세요" : "당신의 턴") : `${activeName}의 차례`}
       />
-      {helpOn && (
-        <p className="shrink-0 truncate text-[11px] text-sky-200/80" data-testid="situation">
-          {describeSituation(game)}
+      <div className="flex shrink-0 items-baseline gap-2 text-[11px]">
+        {helpOn && (
+          <p className="min-w-0 flex-1 truncate text-sky-200/80" data-testid="situation">
+            {describeSituation(game)}
+          </p>
+        )}
+        {/* 작은 화면에서는 테이블 중앙의 덱·버림을 숨기므로 여기서 글자로 */}
+        <p className="ml-auto shrink-0 text-white/45 sm:hidden">
+          덱 {game.deckCount} · 버림 {game.discardTop ? cardLabel(game.discardTop) : "없음"}
         </p>
-      )}
+      </div>
 
       <div className="flex min-h-0 flex-1 gap-3">
         <div className="flex min-h-0 flex-1 flex-col gap-2">

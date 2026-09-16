@@ -30,19 +30,22 @@ export function Table({
         }}
       />
 
-      {/* 덱·버림 */}
-      <div className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">{center}</div>
+      {/* 덱·버림 — 작은 화면에서는 좌석이 중앙까지 차서 숨긴다 (게임판이 글자로 대신 보여준다) */}
+      <div className="absolute left-1/2 top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 sm:block">{center}</div>
 
       {seats.map((seat, i) => {
         // 마지막(나)이 아래 중앙(90°), 나머지는 시계 방향으로 균등 배치
         const angle = (Math.PI / 2) + ((i + 1) / n) * Math.PI * 2;
         // 가로 반경을 작게 잡아야 양 끝 좌석이 화면 밖으로 잘리지 않는다
         const x = 50 + Math.cos(angle) * 34;
-        const y = 50 + Math.sin(angle) * 41;
+        const y = 50 + Math.sin(angle) * 49;
+        // 좌석 상자를 중심이 아니라 가장자리로 앉힌다 — 화면이 낮으면(모바일) 위 좌석이
+        // 타이머를, 아래 좌석이 손패를 덮었다. 위쪽 좌석은 윗변, 아래쪽은 아랫변을 기준.
+        const anchor = y < 45 ? "translate-y-0" : y > 55 ? "-translate-y-full" : "-translate-y-1/2";
         return (
           <div
             key={i}
-            className="absolute z-20 w-[30%] min-w-0 max-w-[10rem] -translate-x-1/2 -translate-y-1/2"
+            className={`absolute z-20 w-[30%] min-w-0 max-w-[10rem] -translate-x-1/2 ${anchor}`}
             style={{ left: `${x}%`, top: `${y}%` }}
           >
             {seat}
