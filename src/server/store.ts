@@ -106,8 +106,9 @@ const g = globalThis as unknown as { __bangStore?: Store };
  * (KV_REST_API_URL / KV_REST_API_TOKEN) 두 이름을 모두 받는다.
  */
 function redisEnv(): { url: string; token: string } | null {
-  const url = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
+  // 빈 문자열로 등록된 변수는 없는 것으로 친다 (대시보드에서 이름만 만들어 둔 경우)
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
   return url && token ? { url, token } : null;
 }
 
