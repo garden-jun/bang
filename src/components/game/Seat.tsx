@@ -146,7 +146,8 @@ export function Seat({
               <span className="text-white/15">{"♥".repeat(Math.max(0, player.maxHp - player.hp))}</span>
             </span>
             {/* 손패 수 — 카드 뒷면을 통째로 그리면 좌석 높이의 절반을 먹어 좌석끼리 겹쳤다 */}
-            <span className="ml-auto flex items-center gap-1 font-bold text-white/80" title={`손패 ${player.handCount}장`}>
+            {/* 남의 카드가 들고 나는 곳 (CardFlights) */}
+            <span className="ml-auto flex items-center gap-1 font-bold text-white/80" title={`손패 ${player.handCount}장`} data-hand={player.id}>
               <span className="h-3.5 w-2.5 rounded-sm border border-red-950 bg-[repeating-linear-gradient(45deg,#7f1d1d_0_2px,#9f1239_2px_4px)]" />
               {player.handCount}
             </span>

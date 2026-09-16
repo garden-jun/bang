@@ -116,6 +116,23 @@ body {
   animation: bang-fly 460ms cubic-bezier(0.4, 0, 0.35, 1) forwards;
 }
 
+/* 남의 카드가 오가는 장면 — 출발·도착은 CardFlights가 픽셀로 넣어준다.
+   좌석 쪽 크기는 아주 작아서, 가운데서 한 번 커져야 무슨 카드가 움직였는지 보인다 */
+@keyframes bang-move {
+  0% { transform: translate(0, 0) scale(var(--move-s0, 1)); opacity: 0; }
+  15% { opacity: 1; }
+  50% {
+    transform: translate(calc(var(--move-x, 0px) * 0.5), calc(var(--move-y, 0px) * 0.5 - 18px)) scale(0.85);
+  }
+  80% { opacity: 1; }
+  100% { transform: translate(var(--move-x, 0), var(--move-y, 0)) scale(var(--move-s1, 1)); opacity: 0; }
+}
+.anim-move {
+  /* both — 순서를 기다리는 동안 출발지에 먼저 보이면 안 되고, 끝난 뒤에는 사라진 채로 남는다 */
+  /* 길이는 CardFlights가 FLIGHT_MS로 넣는다 */
+  animation: bang-move var(--move-ms, 640ms) cubic-bezier(0.4, 0, 0.3, 1) both;
+}
+
 @keyframes bang-toast {
   0% { transform: translateY(-8px); opacity: 0; }
   12%, 82% { transform: translateY(0); opacity: 1; }
@@ -224,6 +241,7 @@ body {
   .anim-pop,
   .anim-deal,
   .anim-fly,
+  .anim-move,
   .anim-toast,
   .anim-arrow,
   .anim-arrow-icon,

@@ -11,6 +11,8 @@ import {
   drawCards,
   drawCheck,
   drawToHand,
+  fromDeck,
+  handToHand,
   hasBarrel,
   hasEquip,
   heal,
@@ -25,12 +27,13 @@ import {
   responder,
   rng,
   timed,
+  toDiscard,
   topPending,
   unlimitedBang,
   weaponRange,
 } from "./core";
 import { cardLabel } from "./i18n";
-import type { Action, Card, DrawSource, GamePlayer, GameState, Pending } from "./types";
+import type { Action, Card, CardMove, DrawSource, GamePlayer, GameState, Pending } from "./types";
 import { GameError } from "./types";
 
 /**
@@ -97,8 +100,8 @@ function handleTurnAction(state: GameState, p: GamePlayer, action: Action, now: 
       if (phase !== "discard") throw new GameError("지금은 버리기 단계가 아닙니다.");
       const excess = p.hand.length - p.hp;
       if (action.cardIds.length !== excess) throw new GameError(`정확히 ${excess}장을 버려야 합니다.`);
-      for (const id of new Set(action.cardIds)) discardFrom(state, p, requireHandCard(p, id).id);
-      log(state, `${name(state, p.id)} 카드 ${excess}장 버림`);
+      const thrown = [...new Set(action.cardIds)].map((id) => discardFrom(state, p, requireHandCard(p, id).id));
+      log(state, `${name(state, p.id)} 카드 ${excess}장 버림`, undefined, toDiscard(p.id, thrown));
       nextTurn(state, now);
       return;
     }
@@ -113,10 +116,12 @@ function doDraw(state: GameState, p: GamePlayer, source: DrawSource | undefined,
     case "blackJack": {
       const cards = drawToHand(state, p, 2);
       const second = cards[1];
-      log(state, `${n} (블랙 잭) 2번째 카드 공개: ${cardLabel(second)}`);
+      // 2번째 카드는 모두에게 공개하므로 앞면으로 날린다
+      const moves: CardMove[] = cards.map((c, i) => ({ from: "deck", to: `hand:${p.id}`, ...(i === 1 && { card: c }) }));
+      log(state, `${n} (블랙 잭) 2번째 카드 공개: ${cardLabel(second)}`, undefined, moves);
       if (second && isRed(second)) {
-        drawToHand(state, p, 1);
-        log(state, `${n} 빨간 카드라 1장 추가로 뽑음`);
+        const extra = drawToHand(state, p, 1);
+        log(state, `${n} 빨간 카드라 1장 추가로 뽑음`, undefined, fromDeck(p.id, extra.length));
       }
       break;
     }
@@ -131,12 +136,16 @@ function doDraw(state: GameState, p: GamePlayer, source: DrawSource | undefined,
         if (!t.alive || t.id === p.id || t.hand.length === 0) throw new GameError("손패가 있는 다른 플레이어를 골라야 합니다.");
         const c = t.hand.splice(rng(state).int(t.hand.length), 1)[0];
         p.hand.push(c);
+        const drawn = drawToHand(state, p, 1);
+        log(state, `${n} (제시 존스) ${name(state, t.id)}의 손패에서 1장 + 덱에서 1장`, undefined, [
+          ...handToHand(t.id, p.id, 1),
+          ...fromDeck(p.id, drawn.length),
+        ]);
+        // 빼앗긴 장면 뒤에 수지 라파예트가 뽑아야 순서가 맞는다
         afterHandChange(state, t);
-        drawToHand(state, p, 1);
-        log(state, `${n} (제시 존스) ${name(state, t.id)}의 손패에서 1장 + 덱에서 1장`);
       } else {
-        drawToHand(state, p, 2);
-        log(state, `${n} 카드 2장 뽑음`);
+        const drawn = drawToHand(state, p, 2);
+        log(state, `${n} 카드 2장 뽑음`, undefined, fromDeck(p.id, drawn.length));
       }
       break;
     }
@@ -145,17 +154,21 @@ function doDraw(state: GameState, p: GamePlayer, source: DrawSource | undefined,
         const c = state.discard.pop();
         if (!c) throw new GameError("버림 더미가 비어 있습니다.");
         p.hand.push(c);
-        drawToHand(state, p, 1);
-        log(state, `${n} (페드로 라미레즈) 버림 더미에서 ${cardLabel(c)} + 덱에서 1장`);
+        const drawn = drawToHand(state, p, 1);
+        log(state, `${n} (페드로 라미레즈) 버림 더미에서 ${cardLabel(c)} + 덱에서 1장`, undefined, [
+          { from: "discard", to: `hand:${p.id}`, card: c },
+          ...fromDeck(p.id, drawn.length),
+        ]);
       } else {
-        drawToHand(state, p, 2);
-        log(state, `${n} 카드 2장 뽑음`);
+        const drawn = drawToHand(state, p, 2);
+        log(state, `${n} 카드 2장 뽑음`, undefined, fromDeck(p.id, drawn.length));
       }
       break;
     }
-    default:
-      drawToHand(state, p, 2);
-      log(state, `${n} 카드 2장 뽑음`);
+    default: {
+      const drawn = drawToHand(state, p, 2);
+      log(state, `${n} 카드 2장 뽑음`, undefined, fromDeck(p.id, drawn.length));
+    }
   }
   state.turn.phase = "play";
 }
@@ -180,6 +193,8 @@ function playCard(
     return target;
   };
   const spendCard = () => discardFrom(state, p, card.id);
+  /** 낸 카드가 버림 더미로 가는 장면 — 그 카드의 로그 줄에 붙인다 */
+  const spent = toDiscard(p.id, [card]);
 
   switch (kind) {
     case "bang": {
@@ -189,7 +204,7 @@ function playCard(
       if (d > weaponRange(p)) throw new GameError(`사거리 밖입니다. (거리 ${d}, 사거리 ${weaponRange(p)})`);
       spendCard();
       state.turn.bangsPlayed += 1;
-      log(state, `${n} → ${name(state, t.id)} 뱅!`, { kind: "bang", from: p.id, to: t.id });
+      log(state, `${n} → ${name(state, t.id)} 뱅!`, { kind: "bang", from: p.id, to: t.id }, spent);
       startBang(state, now, p, t);
       break;
     }
@@ -198,43 +213,41 @@ function playCard(
       if (p.hp >= p.maxHp) throw new GameError("생명이 이미 가득합니다.");
       spendCard();
       heal(state, p, 1);
-      log(state, `${n} 맥주로 생명 1 회복`);
+      log(state, `${n} 맥주로 생명 1 회복`, undefined, spent);
       break;
     }
     case "panic": {
       const t = requireTarget();
       if (distance(state, p.id, t.id) > 1) throw new GameError("패닉!은 거리 1인 대상에게만 쓸 수 있습니다.");
       spendCard();
-      takeCard(state, p, t, action.targetCardId, "steal");
+      takeCard(state, p, t, action.targetCardId, "steal", spent);
       break;
     }
     case "catBalou": {
       const t = requireTarget();
       spendCard();
-      takeCard(state, p, t, action.targetCardId, "discard");
+      takeCard(state, p, t, action.targetCardId, "discard", spent);
       break;
     }
     case "stagecoach":
       spendCard();
-      drawToHand(state, p, 2);
-      log(state, `${n} 역마차로 2장 뽑음`);
+      log(state, `${n} 역마차로 2장 뽑음`, undefined, [...spent, ...fromDeck(p.id, drawToHand(state, p, 2).length)]);
       break;
     case "wellsFargo":
       spendCard();
-      drawToHand(state, p, 3);
-      log(state, `${n} 웰스 파고로 3장 뽑음`);
+      log(state, `${n} 웰스 파고로 3장 뽑음`, undefined, [...spent, ...fromDeck(p.id, drawToHand(state, p, 3).length)]);
       break;
     case "generalStore": {
       spendCard();
       const order = [p.id, ...othersClockwise(state, p.id).map((x) => x.id)];
       const cards = drawCards(state, order.length);
-      log(state, `${n} 잡화점: ${cards.map(cardLabel).join(", ")}`);
+      log(state, `${n} 잡화점: ${cards.map(cardLabel).join(", ")}`, undefined, spent);
       pushPending(state, now, { kind: "generalStore", cards, order });
       break;
     }
     case "indians": {
       spendCard();
-      log(state, `${n} 인디언! — 모두 뱅!을 내거나 피해 1`);
+      log(state, `${n} 인디언! — 모두 뱅!을 내거나 피해 1`, undefined, spent);
       const targets = othersClockwise(state, p.id).map((x) => x.id);
       state.log[state.log.length - 1].meta = { kind: "indians", from: p.id, targets };
       pushPending(state, now, { kind: "indians", from: p.id, targets });
@@ -242,7 +255,7 @@ function playCard(
     }
     case "gatling": {
       spendCard();
-      log(state, `${n} 개틀링! — 모두에게 뱅!`);
+      log(state, `${n} 개틀링! — 모두에게 뱅!`, undefined, spent);
       const targets = othersClockwise(state, p.id).map((x) => x.id);
       state.log[state.log.length - 1].meta = { kind: "gatling", from: p.id, targets };
       pushPending(state, now, { kind: "gatling", from: p.id, targets });
@@ -251,41 +264,53 @@ function playCard(
     case "duel": {
       const t = requireTarget();
       spendCard();
-      log(state, `${n} → ${name(state, t.id)} 결투!`, { kind: "duel", from: p.id, to: t.id });
+      log(state, `${n} → ${name(state, t.id)} 결투!`, { kind: "duel", from: p.id, to: t.id }, spent);
       pushPending(state, now, { kind: "duel", from: p.id, to: t.id, current: t.id });
       break;
     }
     case "saloon":
       spendCard();
       for (const x of alivePlayers(state)) heal(state, x, 1);
-      log(state, `${n} 술집 — 모두 생명 1 회복`);
+      log(state, `${n} 술집 — 모두 생명 1 회복`, undefined, spent);
       break;
     case "jail": {
       const t = requireTarget();
       if (t.role === "sheriff") throw new GameError("보안관은 감옥에 가둘 수 없습니다.");
       if (hasEquip(t, "jail")) throw new GameError("이미 감옥에 있습니다.");
       t.equipment.push(removeCard(p, card.id));
-      log(state, `${n} → ${name(state, t.id)} 감옥에 가둠`, { kind: "jail", from: p.id, to: t.id });
+      log(state, `${n} → ${name(state, t.id)} 감옥에 가둠`, { kind: "jail", from: p.id, to: t.id }, [
+        { from: `hand:${p.id}`, to: `equip:${t.id}`, card },
+      ]);
       break;
     }
     default: {
       if (!isEquipment(kind)) throw new GameError("알 수 없는 카드입니다.");
       if (hasEquip(p, kind)) throw new GameError(`${cardName(card)}은(는) 이미 장착 중입니다.`);
+      const moves: CardMove[] = [];
       if (isWeapon(kind)) {
         const old = p.equipment.find((c) => isWeapon(c.name));
-        if (old) discardFrom(state, p, old.id);
+        if (old) moves.push({ from: `equip:${p.id}`, to: "discard", card: discardFrom(state, p, old.id) });
       }
       p.equipment.push(removeCard(p, card.id));
-      log(state, `${n} ${cardName(card)} 장착`);
+      moves.push({ from: `hand:${p.id}`, to: `equip:${p.id}`, card });
+      log(state, `${n} ${cardName(card)} 장착`, undefined, moves);
     }
   }
   afterHandChange(state, p);
 }
 
 /** 패닉!/캣 발루: targetCardId가 장착 카드 id면 그것, 'hand' 또는 생략이면 손패에서 무작위 */
-function takeCard(state: GameState, from: GamePlayer, to: GamePlayer, targetCardId: string | undefined, mode: "steal" | "discard"): void {
+function takeCard(
+  state: GameState,
+  from: GamePlayer,
+  to: GamePlayer,
+  targetCardId: string | undefined,
+  mode: "steal" | "discard",
+  spent: CardMove[],
+): void {
   let card: Card;
-  if (targetCardId && targetCardId !== "hand") {
+  const fromEquip = !!targetCardId && targetCardId !== "hand";
+  if (fromEquip) {
     const eq = to.equipment.find((c) => c.id === targetCardId);
     if (!eq) throw new GameError("대상의 장착 카드가 아닙니다.");
     card = removeCard(to, eq.id);
@@ -295,10 +320,19 @@ function takeCard(state: GameState, from: GamePlayer, to: GamePlayer, targetCard
   }
   if (mode === "steal") {
     from.hand.push(card);
-    log(state, `${name(state, from.id)} 패닉! → ${name(state, to.id)}의 카드 1장 가져옴`, { kind: "panic", from: from.id, to: to.id });
+    // 장착 카드는 원래 모두에게 보이던 카드라 앞면, 손패에서 뽑은 건 뒷면
+    const taken: CardMove = { from: fromEquip ? `equip:${to.id}` : `hand:${to.id}`, to: `hand:${from.id}`, ...(fromEquip && { card }) };
+    log(state, `${name(state, from.id)} 패닉! → ${name(state, to.id)}의 카드 1장 가져옴`, { kind: "panic", from: from.id, to: to.id }, [
+      ...spent,
+      taken,
+    ]);
   } else {
     state.discard.push(card);
-    log(state, `${name(state, from.id)} 캣 발루 → ${name(state, to.id)}의 ${cardName(card)} 버림`, { kind: "catBalou", from: from.id, to: to.id });
+    const thrown: CardMove = { from: fromEquip ? `equip:${to.id}` : `hand:${to.id}`, to: "discard", card };
+    log(state, `${name(state, from.id)} 캣 발루 → ${name(state, to.id)}의 ${cardName(card)} 버림`, { kind: "catBalou", from: from.id, to: to.id }, [
+      ...spent,
+      thrown,
+    ]);
   }
   afterHandChange(state, to);
 }
@@ -337,7 +371,7 @@ function handlePendingResponse(state: GameState, p: GamePlayer, top: Pending, ac
       if (cards.length !== top.missedNeeded) throw new GameError(`빗나감! ${top.missedNeeded}장이 필요합니다.`);
       for (const c of cards) discardFrom(state, p, c.id);
       state.pending.pop();
-      log(state, `${n} 빗나감!`, { kind: "dodge", from: p.id });
+      log(state, `${n} 빗나감!`, { kind: "dodge", from: p.id }, toDiscard(p.id, cards));
       afterHandChange(state, p);
       return;
     }
@@ -354,7 +388,7 @@ function handlePendingResponse(state: GameState, p: GamePlayer, top: Pending, ac
       const c = requireHandCard(p, ids[0]);
       if (!countsAs(p, c, need)) throw new GameError(need === "missed" ? "빗나감!만 사용할 수 있습니다." : "뱅!만 사용할 수 있습니다.");
       discardFrom(state, p, c.id);
-      log(state, `${n} ${cardName(c)}(으)로 대응`, { kind: "dodge", from: p.id });
+      log(state, `${n} ${cardName(c)}(으)로 대응`, { kind: "dodge", from: p.id }, toDiscard(p.id, [c]));
       afterHandChange(state, p);
       return;
     }
@@ -371,7 +405,7 @@ function handlePendingResponse(state: GameState, p: GamePlayer, top: Pending, ac
       const c = requireHandCard(p, ids[0]);
       if (!countsAs(p, c, "bang")) throw new GameError("뱅!만 사용할 수 있습니다.");
       discardFrom(state, p, c.id);
-      log(state, `${n} 결투: 뱅!`, { kind: "duel", from: p.id, to: other });
+      log(state, `${n} 결투: 뱅!`, { kind: "duel", from: p.id, to: other }, toDiscard(p.id, [c]));
       top.current = other;
       afterHandChange(state, p);
       return;
@@ -383,7 +417,8 @@ function handlePendingResponse(state: GameState, p: GamePlayer, top: Pending, ac
       const c = top.cards.splice(i, 1)[0];
       p.hand.push(c);
       top.order.shift();
-      log(state, `${n} 잡화점에서 ${cardLabel(c)} 선택`);
+      // 잡화점 카드는 덱에서 펼쳐 둔 것이라 덱 자리에서 날아간다
+      log(state, `${n} 잡화점에서 ${cardLabel(c)} 선택`, undefined, [{ from: "deck", to: `hand:${p.id}`, card: c }]);
       return;
     }
     case "kitCarlson": {
@@ -398,7 +433,7 @@ function handlePendingResponse(state: GameState, p: GamePlayer, top: Pending, ac
       state.deck.push(...rest);
       state.pending.pop();
       state.turn.phase = "play";
-      log(state, `${n} (킷 칼슨) 3장 중 2장 선택`);
+      log(state, `${n} (킷 칼슨) 3장 중 2장 선택`, undefined, fromDeck(p.id, picked.length));
       return;
     }
     case "dying": {
@@ -409,7 +444,7 @@ function handlePendingResponse(state: GameState, p: GamePlayer, top: Pending, ac
         if (!cards.every((c) => c.name === "beer")) throw new GameError("맥주만 사용할 수 있습니다.");
         for (const c of cards) discardFrom(state, p, c.id);
         p.hp += cards.length;
-        log(state, `${n} 맥주 ${cards.length}장으로 생명 ${p.hp}`);
+        log(state, `${n} 맥주 ${cards.length}장으로 생명 ${p.hp}`, undefined, toDiscard(p.id, cards));
       }
       if (p.hp >= 1) {
         state.pending.pop();
@@ -437,9 +472,9 @@ function handleAbility(state: GameState, p: GamePlayer, action: Extract<Action, 
   if (p.hp >= p.maxHp) throw new GameError("생명이 이미 가득합니다.");
   const ids = Array.from(new Set(action.cardIds));
   if (ids.length !== 2) throw new GameError("카드 2장을 버려야 합니다.");
-  for (const id of ids) discardFrom(state, p, requireHandCard(p, id).id);
+  const thrown = ids.map((id) => discardFrom(state, p, requireHandCard(p, id).id));
   p.hp += 1;
-  log(state, `${name(state, p.id)} (시드 케첨) 카드 2장 버리고 생명 1 회복`);
+  log(state, `${name(state, p.id)} (시드 케첨) 카드 2장 버리고 생명 1 회복`, undefined, toDiscard(p.id, thrown));
   if (dyingForMe && p.hp >= 1) state.pending.pop();
   afterHandChange(state, p);
 }
@@ -476,7 +511,7 @@ export function settle(state: GameState, now: number): void {
           const last = player(state, top.order[0]);
           const c = top.cards.shift()!;
           last.hand.push(c);
-          log(state, `${name(state, last.id)} 잡화점에서 ${cardLabel(c)} (마지막)`);
+          log(state, `${name(state, last.id)} 잡화점에서 ${cardLabel(c)} (마지막)`, undefined, [{ from: "deck", to: `hand:${last.id}`, card: c }]);
           top.order = [];
         }
         if (top.order.length === 0) {
@@ -529,13 +564,17 @@ function processDynamite(state: GameState, cur: GamePlayer, now: number): void {
   if (!dyn) return;
   if (drawCheck(state, cur, "dynamite", isDynamiteExplode)) {
     discardFrom(state, cur, dyn.id);
-    log(state, `💥 ${name(state, cur.id)} 다이너마이트 폭발!`, { kind: "outcome", from: cur.id, outcome: "explode" });
+    log(state, `💥 ${name(state, cur.id)} 다이너마이트 폭발!`, { kind: "outcome", from: cur.id, outcome: "explode" }, [
+      { from: `equip:${cur.id}`, to: "discard", card: dyn },
+    ]);
     damage(state, now, cur.id, 3);
   } else {
     removeCard(cur, dyn.id);
     const next = nextAlive(state, cur.id);
     next.equipment.push(dyn);
-    log(state, `다이너마이트가 ${name(state, next.id)}에게 넘어감`, { kind: "dynamite", from: cur.id, to: next.id });
+    log(state, `다이너마이트가 ${name(state, next.id)}에게 넘어감`, { kind: "dynamite", from: cur.id, to: next.id }, [
+      { from: `equip:${cur.id}`, to: `equip:${next.id}`, card: dyn },
+    ]);
   }
 }
 
@@ -543,12 +582,14 @@ function processJail(state: GameState, cur: GamePlayer, now: number): void {
   const jail = cur.equipment.find((c) => c.name === "jail");
   if (jail) {
     discardFrom(state, cur, jail.id);
+    // 감옥 카드는 판정 전에 버려지지만, 창살이 떨어지는 결과 장면에 맞춰 날린다
+    const freed: CardMove[] = [{ from: `equip:${cur.id}`, to: "discard", card: jail }];
     if (!drawCheck(state, cur, "jail", isHeart)) {
-      log(state, `${name(state, cur.id)} 감옥에서 못 나와 턴을 건너뜀`, { kind: "outcome", from: cur.id, outcome: "skip" });
+      log(state, `${name(state, cur.id)} 감옥에서 못 나와 턴을 건너뜀`, { kind: "outcome", from: cur.id, outcome: "skip" }, freed);
       nextTurn(state, now);
       return;
     }
-    log(state, `${name(state, cur.id)} 감옥 탈출`, { kind: "outcome", from: cur.id, outcome: "escape" });
+    log(state, `${name(state, cur.id)} 감옥 탈출`, { kind: "outcome", from: cur.id, outcome: "escape" }, freed);
   }
   state.turn.phase = "draw";
   Object.assign(state.turn, timed(state, now, state.config.turnSeconds));

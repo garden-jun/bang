@@ -8,8 +8,10 @@ import type { Action, Card, CardName } from "@/game/types";
 import type { GameView, PlayerView } from "@/game/view";
 import { playReason, targetReason, viewDistance, weaponRange } from "@/game/viewRules";
 import { useGameEvents } from "@/hooks/useGameEvents";
+import { landedBoard } from "@/shared/landing";
 import type { RoomView } from "@/shared/types";
 import { CardBack, CardFace } from "./CardFace";
+import { CardFlights } from "./CardFlight";
 import { CheckReveal } from "./CheckReveal";
 import { DealIn } from "./DealIn";
 import { FlyLayer, useFlyAway } from "./FlyAway";
@@ -78,6 +80,7 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
   /** 카드가 날아갈 도착지 — 앞에 깔리는 카드는 그 사람 좌석으로, 나머지는 버림 더미로 */
   const discardRef = useRef<HTMLDivElement>(null);
   const handRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
   /**
    * 직전 폴링까지 본 로그 시각. 봇이 연달아 두면 여러 사건이 폴링 한 번에 몰려오므로
    * "몇 초 안에 일어난 일"로는 방금 일을 가려낼 수 없다 — 이번에 새로 온 것만 본다.
@@ -127,6 +130,9 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
   };
 
   const events = useGameEvents(view);
+  /** 손패 수·버림 더미는 날아가는 카드가 도착했을 때 바뀐다. 내 손패는 카드가 즉시 보이니 숫자도 즉시 */
+  const board = landedBoard(game, events.landedT, events.landedDiscard, isPlayer ? meId : undefined);
+  const discardTop = board.discardTop;
 
   // 서버/클라 시계 차이 보정한 남은 시간
   const skew = useRef(0);
@@ -282,14 +288,14 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
         )}
         {/* 작은 화면에서는 테이블 중앙의 덱·버림을 숨기므로 여기서 글자로 */}
         <p className="ml-auto shrink-0 text-white/45 sm:hidden">
-          덱 {game.deckCount} · 버림 {game.discardTop ? cardLabel(game.discardTop) : "없음"}
+          덱 {game.deckCount} · 버림 {discardTop ? cardLabel(discardTop) : "없음"}
         </p>
       </div>
 
       <div className="flex min-h-0 flex-1 gap-3">
         <div className="flex min-h-0 flex-1 flex-col gap-2">
           {/* ---------- 테이블 ---------- */}
-          <div className="relative min-h-0 flex-1">
+          <div className="relative min-h-0 flex-1" ref={tableRef}>
             <Table
               seatIds={seats.map((p) => p.id)}
               arrow={events.arrow}
@@ -300,14 +306,14 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
                     <span className="mt-0.5 block text-[9px] text-white/40">덱</span>
                   </div>
                   <div className="text-center" ref={discardRef}>
-                    {game.discardTop ? (
+                    {discardTop ? (
                       // key로 카드가 바뀔 때마다 다시 붙게 해서 얹히는 연출을 건다 —
                       // 남이 낸 카드는 내 화면에 출발점이 없어서 이게 유일한 신호다
-                      <div key={game.discardTop.id} className="anim-pop">
+                      <div key={discardTop.id} className="anim-pop">
                         <CardFace
-                          card={game.discardTop}
+                          card={discardTop}
                           size="sm"
-                          onHover={helpOn ? (on) => setFocus(on ? { kind: "card", card: game.discardTop!, plain: true } : null) : undefined}
+                          onHover={helpOn ? (on) => setFocus(on ? { kind: "card", card: discardTop, plain: true } : null) : undefined}
                         />
                       </div>
                     ) : (
@@ -320,7 +326,7 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
               seats={seats.map((p) => (
                 <Seat
                   key={p.id}
-                  player={p}
+                  player={{ ...p, handCount: board.handCount[p.id] ?? p.handCount }}
                   name={game.names[p.id]}
                   isMe={p.id === meId}
                   isActive={game.responder === p.id && p.alive}
@@ -459,6 +465,7 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
       </div>
 
       <FlyLayer layer={flyLayer} />
+      <CardFlights flight={events.flight} deckRef={deckRef} discardRef={discardRef} tableRef={tableRef} />
 
       {sheet && (
         <HelpSheet

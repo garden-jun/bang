@@ -1,7 +1,7 @@
 import { WEAPON_RANGE, isWeapon } from "./cards";
 import { CARD_KO, cardLabel } from "./i18n";
 import { makeRng, type Rng } from "./rng";
-import type { Card, CardName, CheckKind, GamePlayer, GameState, LogMeta, Pending, Timed, Winner } from "./types";
+import type { Card, CardMove, CardName, CheckKind, GamePlayer, GameState, LogMeta, Pending, Timed, Winner } from "./types";
 import { GameError } from "./types";
 
 // ---------- 조회 ----------
@@ -92,14 +92,28 @@ export function countsAs(p: GamePlayer, c: Card, as: "bang" | "missed"): boolean
 
 // ---------- 로그 ----------
 
-export function log(state: GameState, msg: string, meta?: LogMeta): void {
+export function log(state: GameState, msg: string, meta?: LogMeta, moves?: CardMove[]): void {
   // 길이로 번호를 매기면 아래에서 앞을 잘라낸 뒤로 번호가 80에 멈춘다 —
   // 화면은 "이 번호보다 큰 줄"을 새 사건으로 보므로 연출이 통째로 끊긴다.
   const t = (state.log.at(-1)?.t ?? -1) + 1;
-  state.log.push(meta ? { t, msg, meta } : { t, msg });
+  state.log.push({ t, msg, ...(meta && { meta }), ...(moves && moves.length > 0 && { moves }) });
   // 뷰는 최근 60줄만 쓴다. 방 전체가 매 폴링마다 오가므로 상한이 곧 대역폭이다.
   if (state.log.length > 80) state.log.splice(0, state.log.length - 80);
 }
+
+// ---------- 카드 이동 (연출용) ----------
+
+/** 덱에서 n장 — 무엇을 뽑았는지는 본인만 안다 */
+export const fromDeck = (toId: string, n: number): CardMove[] =>
+  Array.from({ length: n }, () => ({ from: "deck", to: `hand:${toId}` }));
+
+/** 손패에서 낸 카드 — 버림 더미에 앞면으로 놓이니 모두가 본다 */
+export const toDiscard = (fromId: string, cards: Card[]): CardMove[] =>
+  cards.map((card) => ({ from: `hand:${fromId}`, to: "discard", card }));
+
+/** 손패에서 손패로 무작위로 넘어간 카드 — 뒷면으로만 */
+export const handToHand = (fromId: string, toId: string, n: number): CardMove[] =>
+  Array.from({ length: n }, () => ({ from: `hand:${fromId}`, to: `hand:${toId}` }));
 
 // ---------- 덱 ----------
 
@@ -146,8 +160,8 @@ export function removeCard(p: GamePlayer, cardId: string): Card {
 /** 손패 변동 후: 수지 라파예트 */
 export function afterHandChange(state: GameState, p: GamePlayer): void {
   if (p.alive && p.character === "suzyLafayette" && p.hand.length === 0) {
-    drawToHand(state, p, 1);
-    log(state, `${name(state, p.id)} (수지 라파예트) 손패가 비어 1장 뽑습니다.`);
+    const cards = drawToHand(state, p, 1);
+    log(state, `${name(state, p.id)} (수지 라파예트) 손패가 비어 1장 뽑습니다.`, undefined, fromDeck(p.id, cards.length));
   }
 }
 
@@ -220,17 +234,19 @@ export function damage(state: GameState, now: number, targetId: string, n: numbe
 
   if (t.hp > 0) {
     if (t.character === "bartCassidy") {
-      drawToHand(state, t, n);
-      log(state, `${name(state, targetId)} (바트 캐시디) 카드 ${n}장 뽑음`);
+      const cards = drawToHand(state, t, n);
+      log(state, `${name(state, targetId)} (바트 캐시디) 카드 ${n}장 뽑음`, undefined, fromDeck(t.id, cards.length));
     }
     if (t.character === "elGringo" && sourceId && sourceId !== targetId) {
       const s = player(state, sourceId);
-      for (let i = 0; i < n && s.hand.length > 0; i++) {
+      let taken = 0;
+      for (; taken < n && s.hand.length > 0; taken++) {
         const c = s.hand.splice(rng(state).int(s.hand.length), 1)[0];
         t.hand.push(c);
       }
+      // 가져온 장면 뒤에 수지 라파예트가 뽑아야 순서가 맞는다
+      log(state, `${name(state, targetId)} (엘 그링고) ${name(state, sourceId)}의 손패에서 카드를 가져옴`, undefined, handToHand(s.id, t.id, taken));
       afterHandChange(state, s);
-      log(state, `${name(state, targetId)} (엘 그링고) ${name(state, sourceId)}의 손패에서 카드를 가져옴`);
     }
     return;
   }
@@ -251,16 +267,21 @@ export function die(state: GameState, targetId: string, sourceId?: string): void
   t.alive = false;
   t.hp = 0;
   t.roleRevealed = true;
-  log(state, `☠ ${name(state, targetId)} 사망 — 역할은 ${roleKo(t)}였습니다.`);
 
   // 카드 처리: 벌처 샘이 살아 있으면 전부 가져감
   const vulture = alivePlayers(state).find((p) => p.character === "vultureSam");
   const cards = [...t.hand, ...t.equipment];
+  // 손패는 가져가는 사람에게도 뒷면이다. 버려지면 더미에 앞면으로 놓인다
+  const moves: CardMove[] = [
+    ...t.hand.map((c): CardMove => ({ from: `hand:${t.id}`, to: vulture ? `hand:${vulture.id}` : "discard", ...(!vulture && { card: c }) })),
+    ...t.equipment.map((c): CardMove => ({ from: `equip:${t.id}`, to: vulture ? `hand:${vulture.id}` : "discard", card: c })),
+  ];
   t.hand = [];
   t.equipment = [];
+  log(state, `☠ ${name(state, targetId)} 사망 — 역할은 ${roleKo(t)}였습니다.`, undefined, vulture ? undefined : moves);
   if (vulture) {
     vulture.hand.push(...cards);
-    log(state, `${name(state, vulture.id)} (벌처 샘) 카드 ${cards.length}장 획득`);
+    log(state, `${name(state, vulture.id)} (벌처 샘) 카드 ${cards.length}장 획득`, undefined, moves);
   } else {
     state.discard.push(...cards);
   }
@@ -269,14 +290,18 @@ export function die(state: GameState, targetId: string, sourceId?: string): void
   if (sourceId && sourceId !== targetId) {
     const s = player(state, sourceId);
     if (t.role === "outlaw" && s.alive) {
-      drawToHand(state, s, 3);
-      log(state, `${name(state, sourceId)} 무법자 처치 보상으로 3장 뽑음`);
+      const drawn = drawToHand(state, s, 3);
+      log(state, `${name(state, sourceId)} 무법자 처치 보상으로 3장 뽑음`, undefined, fromDeck(s.id, drawn.length));
     }
     if (t.role === "deputy" && s.role === "sheriff") {
+      const lost: CardMove[] = [
+        ...toDiscard(s.id, s.hand),
+        ...s.equipment.map((c): CardMove => ({ from: `equip:${s.id}`, to: "discard", card: c })),
+      ];
       state.discard.push(...s.hand, ...s.equipment);
       s.hand = [];
       s.equipment = [];
-      log(state, `${name(state, sourceId)} 보안관이 부관을 죽여 카드를 모두 버림`);
+      log(state, `${name(state, sourceId)} 보안관이 부관을 죽여 카드를 모두 버림`, undefined, lost);
       afterHandChange(state, s);
     }
   }

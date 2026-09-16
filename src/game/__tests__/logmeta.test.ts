@@ -92,6 +92,83 @@ describe("로그 메타 (연출용)", () => {
   });
 });
 
+describe("카드 이동 (남의 손패 연출용)", () => {
+  const movesOf = (st: ReturnType<typeof four>, from: number) => st.log.filter((l) => l.t >= from).flatMap((l) => l.moves ?? []);
+  const nextT = (st: ReturnType<typeof four>) => (st.log.at(-1)?.t ?? -1) + 1;
+
+  it("덱에서 뽑은 카드는 뒷면 — 무엇을 뽑았는지 로그에 싣지 않는다", () => {
+    const st = four();
+    st.turn = { ...st.turn, playerId: "s", phase: "draw" };
+    st.deck = [card("bang"), card("beer")];
+    const a = applyAction(st, "s", { type: "draw" }, NOW);
+    expect(movesOf(a, nextT(st))).toEqual([
+      { from: "deck", to: "hand:s" },
+      { from: "deck", to: "hand:s" },
+    ]);
+  });
+
+  it("낸 카드는 앞면으로 버림 더미에, 장착은 좌석으로", () => {
+    const bang = card("bang"), scope = card("scope"), jail = card("jail");
+    const st = four();
+    p(st, "s").hand = [bang, scope, jail, card("beer")];
+    let a = applyAction(st, "s", { type: "play", cardId: bang.id, targetId: "o1" }, NOW);
+    expect(a.log.find((l) => l.meta?.kind === "bang")?.moves).toEqual([{ from: "hand:s", to: "discard", card: bang }]);
+    a = applyAction(a, "o1", { type: "respond", cardIds: [] }, NOW);
+    let t = nextT(a);
+    a = applyAction(a, "s", { type: "play", cardId: scope.id }, NOW);
+    expect(movesOf(a, t)).toEqual([{ from: "hand:s", to: "equip:s", card: scope }]);
+    t = nextT(a);
+    a = applyAction(a, "s", { type: "play", cardId: jail.id, targetId: "r" }, NOW);
+    expect(movesOf(a, t)).toEqual([{ from: "hand:s", to: "equip:r", card: jail }]);
+  });
+
+  it("패닉!: 손패에서 뺏은 카드는 뒷면, 장착 카드는 앞면", () => {
+    const panic1 = card("panic"), panic2 = card("panic"), scope = card("scope");
+    const st = four();
+    p(st, "s").hand = [panic1, panic2, card("beer")];
+    p(st, "o1").hand = [card("missed")];
+    p(st, "r").equipment = [scope];
+    let t = nextT(st);
+    let a = applyAction(st, "s", { type: "play", cardId: panic1.id, targetId: "o1", targetCardId: "hand" }, NOW);
+    expect(movesOf(a, t)).toEqual([
+      { from: "hand:s", to: "discard", card: panic1 },
+      { from: "hand:o1", to: "hand:s" },
+    ]);
+    t = nextT(a);
+    a = applyAction(a, "s", { type: "play", cardId: panic2.id, targetId: "r", targetCardId: scope.id }, NOW);
+    expect(movesOf(a, t)).toEqual([
+      { from: "hand:s", to: "discard", card: panic2 },
+      { from: "equip:r", to: "hand:s", card: scope },
+    ]);
+  });
+
+  it("벌처 샘: 죽은 사람의 손패는 뒷면, 장착 카드는 앞면으로 넘어간다", () => {
+    const bang = card("bang"), scope = card("scope");
+    const st = makeState([
+      { id: "s", role: "sheriff" },
+      { id: "o1", role: "outlaw", hp: 1, hand: [card("duel")], equipment: [scope] },
+      { id: "v", role: "outlaw", character: "vultureSam" },
+      { id: "r", role: "renegade" },
+    ]);
+    p(st, "s").hand = [bang];
+    let a = applyAction(st, "s", { type: "play", cardId: bang.id, targetId: "o1" }, NOW);
+    const t = nextT(a);
+    a = applyAction(a, "o1", { type: "respond", cardIds: [] }, NOW);
+    expect(a.log.find((l) => l.t >= t && l.msg.includes("벌처 샘"))?.moves).toEqual([
+      { from: "hand:o1", to: "hand:v" },
+      { from: "equip:o1", to: "hand:v", card: scope },
+    ]);
+  });
+
+  it("로그 줄 수는 그대로 — 봇 대기 계산(playbackMs)이 바뀌지 않는다", () => {
+    const st = four();
+    st.turn = { ...st.turn, playerId: "s", phase: "draw" };
+    st.deck = [card("bang"), card("beer")];
+    const a = applyAction(st, "s", { type: "draw" }, NOW);
+    expect(a.log.filter((l) => l.t >= nextT(st)).map((l) => l.msg)).toEqual(["S 카드 2장 뽑음"]);
+  });
+});
+
 describe("로그 번호", () => {
   it("앞을 잘라낸 뒤에도 계속 늘어난다 (화면이 새 줄을 알아채는 기준)", () => {
     const st = four();

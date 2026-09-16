@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Card, CheckKind, LogMeta } from "@/game/types";
+import type { Card, CardMove, CheckKind, LogMeta } from "@/game/types";
 import type { GameView } from "@/game/view";
+import { discardArrival, landMs } from "@/shared/landing";
 import { CHECK_HOLD_MS, MIN_STEP_MS, stepMs } from "@/shared/pacing";
 import type { RoomView } from "@/shared/types";
 
@@ -61,8 +62,19 @@ export interface ArrowEvent {
   key: number;
 }
 
+/** 이번 장면에 날려 보낼 카드들 */
+export interface FlightEvent {
+  moves: CardMove[];
+  key: number;
+}
+
 interface Beat {
   msg: string | null;
+  /** 로그 줄에서 온 장면이면 그 줄 번호 — 카드가 도착하면 손패 수·버림 더미를 여기까지 반영한다 */
+  t?: number;
+  /** 이 줄에서 버림 더미에 마지막으로 얹히는 카드 */
+  discard?: Card;
+  flight?: FlightEvent;
   effects?: Record<string, SeatEffect>;
   badges?: Record<string, SeatBadge>;
   arrow?: ArrowEvent;
@@ -82,6 +94,13 @@ export function useGameEvents(view: RoomView | null) {
   const [arrow, setArrow] = useState<ArrowEvent | null>(null);
   const [badge, setBadge] = useState<Record<string, SeatBadge>>({});
   const [check, setCheck] = useState<CheckEvent | null>(null);
+  const [flight, setFlight] = useState<FlightEvent | null>(null);
+  // 카드가 도착한 마지막 로그 줄. 게임판이 열릴 때 이미 있던 줄은 도착한 것으로 친다 (lastLogT와 같은 기준점)
+  const [landedT, setLandedT] = useState(() => view?.game?.log.at(-1)?.t ?? -1);
+  const [landedDiscard, setLandedDiscard] = useState<Card | undefined>(() => view?.game?.discardTop);
+  /** 도착 타이머는 따라잡기 중에 순서가 뒤바뀔 수 있다 — 더 늦은 줄의 버림 카드를 덮어쓰지 않게 */
+  const landedDiscardT = useRef(-1);
+  const landTimers = useRef(new Set<ReturnType<typeof setTimeout>>());
 
   const lastLogT = useRef<number | null>(null);
   const prevHp = useRef<Map<string, number>>(new Map());
@@ -137,7 +156,11 @@ export function useGameEvents(view: RoomView | null) {
       // 이번 폴링의 연출은 이 묶음의 마지막 사건에 붙인다
       queue.current.push(
         ...fresh.map((l, i) => {
-          const beat: Beat = { msg: l.msg, effects: i === fresh.length - 1 && hasEffects ? effects : undefined };
+          const beat: Beat = { msg: l.msg, t: l.t, discard: discardArrival(l), effects: i === fresh.length - 1 && hasEffects ? effects : undefined };
+          // 내 손패로 들어오고 나가는 카드는 손패가 직접 날린다 (DealIn/FlyAway) — 두 번 날리지 않는다
+          const mine = `hand:${meId.current}`;
+          const moves = l.moves?.filter((mv) => mv.from !== mine && mv.to !== mine);
+          if (moves?.length) beat.flight = { moves, key: ++effectKey.current };
           const m = l.meta;
           if (m?.kind === "dodge") {
             // 막았다는 표시는 좌석 배지로
@@ -179,6 +202,21 @@ export function useGameEvents(view: RoomView | null) {
       if (next.badges) setBadge((b) => ({ ...b, ...next.badges }));
       // 판정 카드도 화살표처럼 다음 판정이 올 때까지 두고, 사라지는 건 CSS가 맡는다
       if (next.check) setCheck(next.check);
+      // 날아간 카드는 사라지며 끝나므로 화살표처럼 다음 비행이 올 때까지 둔다
+      if (next.flight) setFlight(next.flight);
+      // 손패 수와 버림 더미는 카드가 도착지에 닿을 때 바꾼다 — 먼저 바뀌면 날아가는 카드가 뒷북이 된다
+      if (next.t !== undefined) {
+        const { t, discard } = next;
+        const land = setTimeout(() => {
+          landTimers.current.delete(land);
+          setLandedT((prev) => Math.max(prev, t));
+          if (discard && t > landedDiscardT.current) {
+            landedDiscardT.current = t;
+            setLandedDiscard(discard);
+          }
+        }, landMs(next.flight?.moves.length ?? 0));
+        landTimers.current.add(land);
+      }
       // 내 차례인데 밀린 장면이 남아 있으면 빠르게 따라잡는다. 큐가 비면(=지금 보여준 게
       // 마지막 장면) 평소 속도로 돌아가, 나에게 벌어진 일은 놓치지 않는다.
       const catchUp = iActNow.current && queue.current.length > 0;
@@ -192,9 +230,10 @@ export function useGameEvents(view: RoomView | null) {
   useEffect(
     () => () => {
       if (timer.current) clearTimeout(timer.current);
+      for (const land of landTimers.current) clearTimeout(land);
     },
     [],
   );
 
-  return { message, seat, badge, check, arrow };
+  return { message, seat, badge, check, arrow, flight, landedT, landedDiscard };
 }

@@ -110,10 +110,26 @@ export type LogMeta =
   /** 턴 시작 판정의 결과 */
   | { kind: "outcome"; from: string; outcome: "escape" | "skip" | "explode" };
 
+/** 카드가 놓이는 곳. 좌석의 손패/장착 줄은 플레이어 id로 가른다 */
+export type CardPlace = "deck" | "discard" | `hand:${string}` | `equip:${string}`;
+
+/**
+ * 카드 한 장의 이동 — 남의 손패는 내 화면에 없어서, 이게 없으면 손패 수 숫자만 바뀐다.
+ * card는 모두가 볼 수 있는 카드일 때만 넣는다. 로그는 모든 사람에게 그대로 가므로
+ * 덱에서 뽑은 카드나 손패에서 무작위로 뺏긴 카드를 넣으면 남의 손패가 새어 나간다.
+ */
+export interface CardMove {
+  from: CardPlace;
+  to: CardPlace;
+  card?: Card;
+}
+
 export interface LogEntry {
   t: number;
   msg: string;
   meta?: LogMeta;
+  /** 이 줄이 재생될 때 날려 보낼 카드들 */
+  moves?: CardMove[];
 }
 
 export interface GameConfig {
