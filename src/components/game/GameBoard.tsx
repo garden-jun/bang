@@ -238,17 +238,18 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
         <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
           {view.spectators.length > 0 && <SpectatorBadge spectators={view.spectators} meId={meId} />}
           <button
-            className={`rounded border px-2 py-1 text-xs ${helpOn ? "border-amber-500/50 bg-amber-900/30 text-amber-200" : "border-white/15 text-white/50"} hover:bg-white/10`}
-            onClick={toggleHelp}
-            title="초보자 도움말 켜기/끄기"
+            className="rounded border border-white/15 px-2 py-1 text-xs text-white/70 hover:bg-white/10"
+            onClick={() => setSheet("open")}
+            title="규칙·카드·캐릭터 보기"
           >
             도움말
           </button>
           <button
-            className="rounded border border-white/15 px-2 py-1 text-xs font-bold text-white/70 hover:bg-white/10"
-            onClick={() => setSheet("open")}
-            title="규칙·카드·캐릭터 보기"
-            aria-label="규칙 보기"
+            className={`rounded border px-2 py-1 text-xs font-bold ${helpOn ? "border-amber-500/50 bg-amber-900/30 text-amber-200" : "border-white/15 text-white/50"} hover:bg-white/10`}
+            onClick={toggleHelp}
+            title="초보자 설명 켜기/끄기 — 카드·좌석에 올리면 설명이 뜹니다"
+            aria-label="초보자 설명 켜기/끄기"
+            aria-pressed={helpOn}
           >
             ?
           </button>
