@@ -80,10 +80,7 @@ export default function LobbyPage() {
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Logo className="h-10 w-10 shrink-0 text-amber-500" />
-          <div>
-            <h1 className="text-3xl font-black tracking-tight text-amber-400">BANG!</h1>
-            <p className="text-xs text-white/60">친구들과 브라우저로 즐기는 서부 총잡이 카드 게임</p>
-          </div>
+          <h1 className="text-3xl font-black tracking-tight text-amber-400">SKALA BANG!</h1>
         </div>
         <NicknameField value={nick} onChange={setTypedNick} disabled={busy} />
       </header>
