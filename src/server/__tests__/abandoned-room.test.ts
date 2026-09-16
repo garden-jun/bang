@@ -26,6 +26,16 @@ async function ageHumans(code: string, minutes: number) {
   g.__bangRoomCache?.clear();
 }
 
+/** 혼자 붙들고 있기 시작한 시각을 과거로 돌린다 */
+async function ageAlone(code: string, minutes: number) {
+  const { loadRoom, saveRoom } = await import("../room");
+  const room = (await loadRoom(code, true))!;
+  expect(room.aloneSince).toBeDefined(); // 혼자인 상태가 기록돼 있어야 한다
+  room.aloneSince = Date.now() - minutes * 60 * 1000;
+  await saveRoom(room, Date.now());
+  g.__bangRoomCache?.clear();
+}
+
 test("아무도 안 보는 채로 10분이 지나면 방이 닫힌다", async () => {
   const { createSession } = await import("../session");
   const { createRoom, listRooms } = await import("../roomService");
@@ -67,5 +77,73 @@ test("봇과 둘이 플레이 중이어도 사람이 보고 있으면 살아남�
 
   // 그 사람이 떠나면 그제서야 닫힌다
   await ageHumans(code, 11);
+  expect((await listRooms()).map((r) => r.code)).not.toContain(code);
+});
+
+test("시작도 안 한 방을 혼자 10분 붙들고 있으면 닫힌다", async () => {
+  const { createSession } = await import("../session");
+  const { createRoom, getState, listRooms } = await import("../roomService");
+  const { loadRoom } = await import("../room");
+
+  const me = await createSession("사람");
+  const { code } = await createRoom(me, {});
+  await getState(me, code, null); // 첫 폴링에서 aloneSince가 찍힌다
+
+  await ageAlone(code, 11);
+  expect((await listRooms()).map((r) => r.code)).not.toContain(code);
+  expect(await loadRoom(code, true)).toBeNull();
+});
+
+test("혼자라도 봇과 게임 중이면 닫지 않는다", async () => {
+  const { createSession } = await import("../session");
+  const { createRoom, addBot, startGame, getState, listRooms } = await import("../roomService");
+  const { loadRoom } = await import("../room");
+
+  const me = await createSession("사람");
+  const { code } = await createRoom(me, {});
+  for (let i = 0; i < 3; i++) await addBot(me, code);
+  await startGame(me, code);
+  await getState(me, code, null);
+
+  // 게임이 시작되면 "혼자" 기록이 지워진다 — 아무리 오래 해도 걸리지 않는다
+  expect((await loadRoom(code, true))!.aloneSince).toBeUndefined();
+  expect((await listRooms()).map((r) => r.code)).toContain(code);
+});
+
+test("둘째 사람이 들어오면 혼자 기록이 지워진다", async () => {
+  const { createSession } = await import("../session");
+  const { createRoom, joinRoom, getState, listRooms } = await import("../roomService");
+  const { loadRoom } = await import("../room");
+
+  const me = await createSession("방장");
+  const other = await createSession("손님");
+  const { code } = await createRoom(me, {});
+  await getState(me, code, null);
+  expect((await loadRoom(code, true))!.aloneSince).toBeDefined();
+
+  await joinRoom(other, code, "player");
+  await getState(me, code, null);
+  expect((await loadRoom(code, true))!.aloneSince).toBeUndefined();
+  expect((await listRooms()).map((r) => r.code)).toContain(code);
+});
+
+test("게임이 끝나 혼자 남으면 다시 10분 시계가 돈다", async () => {
+  const { createSession } = await import("../session");
+  const { createRoom, addBot, startGame, getState, listRooms } = await import("../roomService");
+  const { loadRoom, saveRoom } = await import("../room");
+
+  const me = await createSession("사람");
+  const { code } = await createRoom(me, {});
+  for (let i = 0; i < 3; i++) await addBot(me, code);
+  await startGame(me, code);
+
+  // 게임이 끝난 상태를 만든다
+  const room = (await loadRoom(code, true))!;
+  room.status = "finished";
+  await saveRoom(room, Date.now());
+  g.__bangRoomCache?.clear();
+  await getState(me, code, null);
+
+  await ageAlone(code, 11);
   expect((await listRooms()).map((r) => r.code)).not.toContain(code);
 });

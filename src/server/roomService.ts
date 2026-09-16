@@ -112,6 +112,15 @@ function requireHost(room: RoomState, session: Session): void {
   if (room.hostId !== session.playerId) throw new ApiError(403, "방장만 할 수 있습니다.");
 }
 
+/**
+ * 게임이 시작되지 않았거나(waiting) 끝난(finished) 방에 사람이 한 명뿐인가.
+ * 진행 중인 게임은 사람 1명 + 봇들이 정상이므로 절대 여기 걸리지 않는다.
+ */
+function isSolo(room: RoomState): boolean {
+  if (room.status === "playing") return false;
+  return [...room.players, ...room.spectators].filter((m) => !m.isBot).length <= 1;
+}
+
 /** 접속 시각 갱신 + 접속 목록 재계산 + 타임아웃 적용. 뷰가 바뀌었으면 changed */
 function tick(room: RoomState, now: number, touchId?: string): { changed: boolean; touched: boolean } {
   let touched = false;
@@ -140,6 +149,16 @@ function tick(room: RoomState, now: number, touchId?: string): { changed: boolea
   if (room.game?.winner && room.status === "playing") {
     room.status = "finished";
     changed = true;
+  }
+
+  // 혼자 붙들고 있기 시작한 시각. 화면에 안 보이는 기록이라 version은 올리지 않는다.
+  const solo = isSolo(room);
+  if (solo && !room.aloneSince) {
+    room.aloneSince = now;
+    touched = true;
+  } else if (!solo && room.aloneSince !== undefined) {
+    delete room.aloneSince;
+    touched = true;
   }
   return { changed, touched };
 }

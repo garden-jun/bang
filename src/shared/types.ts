@@ -32,6 +32,11 @@ export interface RoomState {
   spectators: RoomMember[];
   /** 마지막으로 계산한 접속 중 플레이어 (변화 감지용) */
   connectedIds: string[];
+  /**
+   * 게임이 시작되지 않았거나 끝난 채로 사람이 한 명뿐이 된 시각.
+   * 여럿이 되거나 게임이 시작되면 지운다. 화면에는 안 보이는 정리용 기록.
+   */
+  aloneSince?: number;
   game?: GameState;
 }
 

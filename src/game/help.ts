@@ -102,7 +102,7 @@ export function describeSituation(game: GameView): string {
 
 export function explainCard(game: GameView, me: PlayerView | undefined, card: Card, canPlayNow: boolean): HelpText {
   const info = CARD_KO[card.name];
-  const kind = isEquip(card.name) || card.name === "jail" || card.name === "dynamite" ? "장착 카드 — 내면 앞에 놓이고 계속 효과를 냅니다" : "";
+  const kind = isEquip(card.name) || card.name === "jail" || card.name === "dynamite" ? "장착 카드 — 앞에 놓으면 계속 효과를 냅니다" : "";
   const body = kind ? `${info.desc} ${kind}` : info.desc;
   if (!me || !me.alive) return { title: info.name, body };
   const reason = playReason(game, me, card, canPlayNow);

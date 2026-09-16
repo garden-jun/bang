@@ -79,11 +79,20 @@ export async function requireRoom(code: string, fresh = false): Promise<RoomStat
 
 const isListed = (r: RoomState) => r.settings.isPublic && r.status !== "finished";
 
-/** 사람이 아무도 안 보고 있는 방인가 (봇은 폴링하지 않으므로 세지 않는다) */
+/**
+ * 닫아도 되는 방인가. 두 가지 경우를 본다 (봇은 폴링하지 않으므로 세지 않는다).
+ *
+ *  1. 아무도 안 보고 있다 — 탭을 닫고 떠난 방
+ *  2. 시작도 안 했거나 끝난 방을 혼자 10분째 붙들고 있다 (`aloneSince`)
+ *
+ * 진행 중인 게임은 어느 쪽에도 걸리지 않는다. 사람이 보고 있는 한 `lastSeen`이
+ * 갱신되고, `aloneSince`는 게임이 시작될 때 지워지기 때문이다.
+ */
 function isAbandoned(room: RoomState, now: number): boolean {
   const humans = [...room.players, ...room.spectators].filter((m) => !m.isBot);
   if (humans.length === 0) return true;
-  return now - Math.max(...humans.map((m) => m.lastSeen)) > ABANDONED_MS;
+  if (now - Math.max(...humans.map((m) => m.lastSeen)) > ABANDONED_MS) return true;
+  return room.aloneSince !== undefined && now - room.aloneSince > ABANDONED_MS;
 }
 
 /** 저장한다 (version은 호출자가 관리). 공개 목록도 동기화. */
