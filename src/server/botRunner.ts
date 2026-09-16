@@ -17,8 +17,17 @@ const MAX_MOVES = 24;
  * 보고 무슨 일이 있었는지 못 본다. LLM이 이미 시간을 썼으면 그만큼 덜 쉰다.
  *
  * BOT_MIN_MOVE_MS로 조절한다 (0이면 즉시 — 테스트용).
+ * 클라이언트 연출 간격(useGameEvents의 STEP_MS)과 함께 움직여야 한다 —
+ * 봇이 연출보다 빨리 두면 큐가 밀려 사람이 따라 읽지 못한다.
  */
-const MIN_MOVE_MS = Number(process.env.BOT_MIN_MOVE_MS ?? 1100);
+const MIN_MOVE_MS = Number(process.env.BOT_MIN_MOVE_MS ?? 1650);
+
+/**
+ * 한 요청에서 봇에 쓸 수 있는 시간. 서버리스 함수에는 실행시간 상한이 있는데,
+ * 한 수가 느려질수록 MAX_MOVES를 다 채우기 전에 잘릴 수 있다. 플랫폼이 끊기를
+ * 기다리지 말고 스스로 멈춘다 — 남은 수는 다음 폴링이 이어받는다.
+ */
+const BUDGET_MS = 8000;
 
 /**
  * 지금 행동해야 할 사람이 봇이면 대신 둔다. 연속된 봇 차례는 이어서 처리한다.
@@ -27,7 +36,9 @@ const MIN_MOVE_MS = Number(process.env.BOT_MIN_MOVE_MS ?? 1100);
  * 프로세스가 없으므로, "봇 차례"를 알아채는 시점은 결국 상태를 바꾼 요청뿐이다.
  */
 export async function runBots(code: string): Promise<void> {
+  const runStartedAt = Date.now();
   for (let i = 0; i < MAX_MOVES; i++) {
+    if (Date.now() - runStartedAt > BUDGET_MS) return;
     const startedAt = Date.now();
     const room = await loadRoom(code, true);
     if (!room?.game || room.status !== "playing" || room.game.winner) return;

@@ -11,10 +11,14 @@ export interface SeatEffect {
   key: number;
 }
 
-/** 한 번에 여러 사건이 몰려와도 이 간격으로 하나씩 보여준다 */
-const STEP_MS = 900;
+/**
+ * 한 번에 여러 사건이 몰려와도 이 간격으로 하나씩 보여준다.
+ * globals.css의 --toast-ms/--arrow-ms, 서버의 BOT_MIN_MOVE_MS와 같이 움직인다 —
+ * 하나만 바꾸면 연출이 잘리거나 혼자 남는다.
+ */
+const STEP_MS = 1350;
 /** 밀린 사건이 많으면 더 빨리 흘린다 (봇이 연달아 둘 때) */
-const MIN_STEP_MS = 420;
+const MIN_STEP_MS = 630;
 
 /** 테이블 위에 그릴 화살표 — 공격자에서 대상(들)로 */
 export interface ArrowEvent {
@@ -115,7 +119,7 @@ export function useGameEvents(view: RoomView | null) {
       if (next.arrow) setArrow(next.arrow);
       if (next.effects) setSeat((s) => ({ ...s, ...next.effects }));
       // 밀린 게 많으면 간격을 줄여 따라잡는다
-      const step = Math.max(MIN_STEP_MS, STEP_MS - queue.current.length * 120);
+      const step = Math.max(MIN_STEP_MS, STEP_MS - queue.current.length * 180);
       timer.current = setTimeout(pump, step);
     }
   }, [game]);

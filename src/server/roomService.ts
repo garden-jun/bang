@@ -58,12 +58,12 @@ export function toRoomView(room: RoomState, session: Session, now: number): Room
     : undefined;
 
   // 지금 행동할 사람만 빠르게 본다. 나머지는 느려도 체감 차이가 없다.
-  // 단, 봇 차례에는 사람이 구경만 하므로 봇이 두는 속도(MIN_MOVE_MS)에 맞춘다 —
+  // 단, 봇 차례에는 사람이 구경만 하므로 봇이 두는 속도(BOT_MIN_MOVE_MS, 기본 1650)에 맞춘다 —
   // 더 느리면 여러 수가 한 번에 몰려 와서 무슨 일이 있었는지 못 본다.
   let pollMs = 3000;
   if (room.status === "playing" && game) {
     if (game.responder === session.playerId) pollMs = 1000;
-    else pollMs = room.players.find((p) => p.id === game.responder)?.isBot ? 1200 : 2000;
+    else pollMs = room.players.find((p) => p.id === game.responder)?.isBot ? 1800 : 2000;
   }
 
   return {

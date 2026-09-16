@@ -22,6 +22,7 @@ body {
 }
 
 /* ---------- 연출 ----------
+   길이는 useGameEvents의 STEP_MS(사건을 하나씩 흘리는 간격)에 맞춰 둔다.
    폴링 구조라 "무슨 일이 일어났는지"는 클라이언트가 로그 증분으로 알아낸다.
    아래 애니메이션은 그 이벤트에 붙는다. */
 
@@ -94,7 +95,7 @@ body {
   100% { transform: translateY(-4px); opacity: 0; }
 }
 .anim-toast {
-  animation: bang-toast var(--toast-ms, 1200ms) ease-out forwards;
+  animation: bang-toast var(--toast-ms, 1800ms) ease-out forwards;
 }
 
 /* 화살표: 선이 그어지고, 잠시 머물다 사라진다 */
@@ -107,7 +108,7 @@ body {
 .anim-arrow {
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
-  animation: bang-arrow-draw var(--arrow-ms, 1600ms) ease-out forwards;
+  animation: bang-arrow-draw var(--arrow-ms, 2400ms) ease-out forwards;
 }
 @keyframes bang-arrow-icon {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
@@ -115,7 +116,7 @@ body {
   100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
 }
 .anim-arrow-icon {
-  animation: bang-arrow-icon var(--arrow-ms, 1600ms) ease-out forwards;
+  animation: bang-arrow-icon var(--arrow-ms, 2400ms) ease-out forwards;
 }
 
 /* 좌석 위 배지 (빗나감!) */
@@ -126,7 +127,7 @@ body {
   100% { transform: translate(-50%, -6px) scale(1); opacity: 0; }
 }
 .anim-badge {
-  animation: bang-badge 1300ms ease-out forwards;
+  animation: bang-badge 1950ms ease-out forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
