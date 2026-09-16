@@ -93,7 +93,10 @@ export function countsAs(p: GamePlayer, c: Card, as: "bang" | "missed"): boolean
 // ---------- 로그 ----------
 
 export function log(state: GameState, msg: string, meta?: LogMeta): void {
-  state.log.push(meta ? { t: state.log.length, msg, meta } : { t: state.log.length, msg });
+  // 길이로 번호를 매기면 아래에서 앞을 잘라낸 뒤로 번호가 80에 멈춘다 —
+  // 화면은 "이 번호보다 큰 줄"을 새 사건으로 보므로 연출이 통째로 끊긴다.
+  const t = (state.log.at(-1)?.t ?? -1) + 1;
+  state.log.push(meta ? { t, msg, meta } : { t, msg });
   // 뷰는 최근 60줄만 쓴다. 방 전체가 매 폴링마다 오가므로 상한이 곧 대역폭이다.
   if (state.log.length > 80) state.log.splice(0, state.log.length - 80);
 }
