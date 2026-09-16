@@ -193,12 +193,14 @@ export function Seat({
         )}
       </div>
 
+      {/* 형제끼리 key가 겹치면 안쪽 상자의 key가 바뀔 때(피해 흔들림) React가 둘 다 새로 만들어
+          연출이 처음부터 다시 재생된다 — 창살과 배지는 접두사로 key를 가른다 */}
       {barsFalling && (
-        <div key={badge.key} className="anim-bars-fall pointer-events-none absolute inset-0 z-10 rounded-xl" style={{ backgroundImage: BARS }} />
+        <div key={`bars-${badge.key}`} className="anim-bars-fall pointer-events-none absolute inset-0 z-10 rounded-xl" style={{ backgroundImage: BARS }} />
       )}
       {/* 막았다·탈출·폭발 — 맞았을 때만 연출이 있고 나머지는 아무것도 없던 걸 채운다 */}
       {badge && (
-        <div key={badge.key} className="pointer-events-none absolute inset-0 z-30">
+        <div key={`badge-${badge.key}`} className="pointer-events-none absolute inset-0 z-30">
           {badge.kind === "explode" && <div className="anim-explode absolute inset-0 rounded-xl" />}
           <div
             className={`anim-badge absolute -top-2 left-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-black text-white shadow-lg ring-2 ring-white/60 ${BADGE[badge.kind].tone}`}
