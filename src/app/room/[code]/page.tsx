@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GameBoard } from "@/components/game/GameBoard";
 import { ResultScreen } from "@/components/room/ResultScreen";
 import { WaitingRoom } from "@/components/room/WaitingRoom";
@@ -41,22 +41,40 @@ export default function RoomPage() {
   const ready = nickname.length >= 1 && nickname.length <= 12;
 
   /** 입장하는 순간에 세션을 만든다 (닉네임만 받는 화면을 따로 두지 않으려고) */
-  const join = async (as: "player" | "spectator") => {
-    if (!ready) return;
-    setJoinError(null);
-    setBusy(true);
-    try {
-      if (session.status !== "ready" || session.info?.nickname !== nickname) {
-        await session.login(nickname);
+  const join = useCallback(
+    async (as: "player" | "spectator") => {
+      if (!ready) return;
+      setJoinError(null);
+      setBusy(true);
+      try {
+        if (session.status !== "ready" || session.info?.nickname !== nickname) {
+          await session.login(nickname);
+        }
+        await api.join(code, as);
+        setJoined(true);
+      } catch (e) {
+        setJoinError(e instanceof Error ? e.message : "입장 실패");
+      } finally {
+        setBusy(false);
       }
-      await api.join(code, as);
-      setJoined(true);
-    } catch (e) {
-      setJoinError(e instanceof Error ? e.message : "입장 실패");
-    } finally {
-      setBusy(false);
-    }
-  };
+    },
+    [ready, nickname, session, code],
+  );
+
+  // 닉네임이 있으면 묻지 않고 바로 들어간다 — 대기 중이고 자리가 있으면 플레이어, 아니면 관전.
+  // 방을 만든 사람도 이 경로로 자연스럽게 자기 방에 들어간다. 자리는 대기실에서 바꿀 수 있다.
+  const autoTried = useRef(false);
+  useEffect(() => {
+    if (member || autoTried.current || busy || !ready) return;
+    if (!info || info === "missing" || session.status === "loading") return;
+    const canPlay = info.status === "waiting" && info.players < info.maxPlayers;
+    // 렌더 직후 동기 setState를 피하려고 한 틱 미룬다
+    const t = setTimeout(() => {
+      autoTried.current = true;
+      void join(canPlay ? "player" : "spectator");
+    }, 0);
+    return () => clearTimeout(t);
+  }, [member, busy, ready, info, session.status, join]);
 
   const leave = async () => {
     await room.leave().catch(() => {});
@@ -91,6 +109,7 @@ export default function RoomPage() {
     if (!info) return <Center>불러오는 중…</Center>;
     const full = info.players >= info.maxPlayers;
     const playing = info.status === "playing";
+    if (busy || (ready && !joinError)) return <Center>입장하는 중…</Center>;
     return (
       <Center>
         <Panel title={`${info.hostNickname}의 방 · ${code}`} className="w-full max-w-sm">
@@ -100,12 +119,20 @@ export default function RoomPage() {
           <ErrorBanner message={joinError} />
           <NicknameField value={nick} onChange={setTypedNick} disabled={busy} className="mt-3 justify-between" />
           <div className="mt-3 flex flex-col gap-2">
-            <Button disabled={!ready || busy || full || playing} onClick={() => join("player")}>
-              플레이어로 참가{full ? " (가득 참)" : playing ? " (진행 중)" : ""}
-            </Button>
-            <Button variant="ghost" disabled={!ready || busy} onClick={() => join("spectator")}>
-              관전하기
-            </Button>
+            {joinError ? (
+              <>
+                <Button disabled={!ready || busy || full || playing} onClick={() => join("player")}>
+                  플레이어로 참가{full ? " (가득 참)" : playing ? " (진행 중)" : ""}
+                </Button>
+                <Button variant="ghost" disabled={!ready || busy} onClick={() => join("spectator")}>
+                  관전하기
+                </Button>
+              </>
+            ) : (
+              <Button disabled={!ready || busy} onClick={() => join(!full && !playing ? "player" : "spectator")}>
+                입장
+              </Button>
+            )}
             <Link href="/" className="text-center text-xs text-white/50 underline">
               로비로 돌아가기
             </Link>

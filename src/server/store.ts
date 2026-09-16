@@ -101,15 +101,31 @@ class MemoryStore implements Store {
 // dev 서버 HMR에도 인메모리 상태가 유지되도록 globalThis에 붙여둔다
 const g = globalThis as unknown as { __bangStore?: Store };
 
+/**
+ * Redis 접속 정보. Vercel Marketplace의 Upstash 연동은 기본 접두사가 KV_ 라서
+ * (KV_REST_API_URL / KV_REST_API_TOKEN) 두 이름을 모두 받는다.
+ */
+function redisEnv(): { url: string; token: string } | null {
+  const url = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
+  return url && token ? { url, token } : null;
+}
+
+/** 배포 확인용 (/api/health) */
+export function storeKind(): "upstash" | "memory" {
+  return redisEnv() ? "upstash" : "memory";
+}
+
 export function getStore(): Store {
   if (g.__bangStore) return g.__bangStore;
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (url && token) {
-    g.__bangStore = new UpstashStore(new Redis({ url, token }));
+  const env = redisEnv();
+  if (env) {
+    g.__bangStore = new UpstashStore(new Redis(env));
   } else {
-    if (process.env.NODE_ENV === "production") {
-      console.warn("[store] UPSTASH_REDIS_REST_URL 미설정 — 인메모리 스토어 사용 (서버리스에서는 상태가 유지되지 않음)");
+    // 서버리스에서 인메모리는 요청마다 다른 인스턴스에 떨어져 "방금 만든 방이 없다"가 된다.
+    // 조용히 굴러가면 원인을 찾기 어려우므로 배포 환경에서는 바로 실패시킨다.
+    if (process.env.NODE_ENV === "production" && process.env.VERCEL) {
+      throw new Error("Redis 미설정: Vercel 프로젝트에 UPSTASH_REDIS_REST_URL/TOKEN 또는 KV_REST_API_URL/TOKEN 환경변수가 필요합니다.");
     }
     g.__bangStore = new MemoryStore();
   }
