@@ -240,8 +240,9 @@ export async function joinRoom(session: Session, code: string, as: "player" | "s
   const current = await getRoomOf(session.playerId);
   if (current && current !== code) await leaveRoom(session, current).catch(() => {});
 
-  return withRoomLock(code, async (room) => {
-    const now = Date.now();
+  const now = Date.now();
+  // silent 저장이 섞이므로 뷰는 락 밖에서, 확정된 버전으로 만든다 (LockResult.silent 참고)
+  const saved = await withRoomLock(code, async (room) => {
     const existing = memberOf(room, session.playerId);
     const seat = seatOf(room, session.playerId);
     const want: "player" | "spectator" =
@@ -256,7 +257,7 @@ export async function joinRoom(session: Session, code: string, as: "player" | "s
       existing.lastSeen = now;
       existing.nickname = session.nickname;
       tick(room, now);
-      return { room, result: toRoomView(room, session, now), silent: true };
+      return { room, result: room, silent: true };
     }
     // 대기실에서 플레이어 ↔ 관전자 전환
     if (existing) {
@@ -276,8 +277,9 @@ export async function joinRoom(session: Session, code: string, as: "player" | "s
     }
     await setRoomOf(session.playerId, code);
     tick(room, now);
-    return { room, result: toRoomView(room, session, now) };
+    return { room, result: room };
   });
+  return toRoomView(saved, session, now);
 }
 
 export async function leaveRoom(session: Session, code: string): Promise<void> {
@@ -348,8 +350,8 @@ export async function pollState(
   if (changed || touched) {
     view = await withRoomLock(code, async (fresh) => {
       const r = tick(fresh, now, session.playerId);
-      return { room: fresh, result: toRoomView(fresh, session, now), silent: !r.changed };
-    });
+      return { room: fresh, result: fresh, silent: !r.changed };
+    }).then((saved) => toRoomView(saved, session, now));
   } else {
     view = toRoomView(room, session, now);
   }

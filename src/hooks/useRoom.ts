@@ -47,7 +47,8 @@ export function useRoom(code: string, enabled: boolean) {
           setGone(e.status === 403 ? "notMember" : "notFound");
           return;
         }
-        delay = 5000;
+        // 409는 락 경합일 뿐이라 곧 풀린다 — 5초씩 쉬면 그동안 남의 변경을 못 본다
+        delay = e instanceof ApiClientError && e.status === 409 ? 300 : 5000;
       }
       // 안 보고 있는 탭은 천천히. 끊긴 것으로 잡히지 않을 만큼은 유지한다
       // (DISCONNECT_AFTER_MS 30초 > 8초 폴링 + 12초 저장 간격).

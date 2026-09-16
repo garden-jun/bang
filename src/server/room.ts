@@ -149,7 +149,11 @@ export interface LockResult<T> {
   /** 저장할 상태. null이면 저장하지 않음 */
   room: RoomState | null;
   result: T;
-  /** true면 version을 올리지 않고 저장 */
+  /**
+   * true면 version을 올리지 않고 저장.
+   * 이때 fn 안에서 만든 뷰는 저장될 값보다 1 큰 버전을 달고 나간다 — 클라이언트가
+   * 그 번호를 쥐면 다음 변경을 304로 놓친다. 뷰는 락이 끝난 뒤 돌려받은 방으로 만든다.
+   */
   silent?: boolean;
   /** 저장은 하되 호출자에게 던질 에러 (타임아웃 처리 후 액션이 거부된 경우 등) */
   error?: unknown;
