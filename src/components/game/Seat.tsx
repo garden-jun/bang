@@ -1,7 +1,7 @@
 "use client";
 
 import { CHARACTER_KO, ROLE_KO } from "@/game/i18n";
-import type { CardName, CharacterName } from "@/game/types";
+import type { Card, CardName, CharacterName } from "@/game/types";
 import type { PlayerView } from "@/game/view";
 import type { SeatEffect } from "@/hooks/useGameEvents";
 import { CardBack, CardFace } from "./CardFace";
@@ -28,6 +28,7 @@ export function Seat({
   effect,
   onTarget,
   onHover,
+  onCardHover,
 }: {
   player: PlayerView;
   name: string;
@@ -46,10 +47,25 @@ export function Seat({
   onTarget?: () => void;
   /** 도움말: 마우스를 올리면 설명 줄에 이 좌석 설명을 띄운다 */
   onHover?: (on: boolean) => void;
+  /** 도움말: 좌석에 깔린 카드에 마우스를 올렸을 때 (ghost는 장착이 아니라 캐릭터 능력) */
+  onCardHover?: (card: Card | null, ghost?: boolean) => void;
 }) {
   const ch = CHARACTER_KO[player.character];
   const dead = !player.alive;
   const innate = INNATE[player.character];
+  const innateCard: Card | null = innate ? { id: `innate-${player.id}`, name: innate, suit: "S", rank: 1 } : null;
+
+  /**
+   * 카드에서 마우스가 빠질 때 좌석 설명을 되살린다 — 커서는 아직 좌석 안이라
+   * 좌석의 mouseleave가 오지 않는다. 그냥 지우면 설명 줄이 빈 채로 남는다.
+   */
+  const cardHover = (c: Card, ghost?: boolean) =>
+    onCardHover
+      ? (on: boolean) => {
+          onCardHover(on ? c : null, ghost);
+          if (!on) onHover?.(true);
+        }
+      : undefined;
 
   const anim =
     effect?.kind === "hit" ? "anim-hit anim-flash-hit" : effect?.kind === "heal" ? "anim-flash-heal" : effect?.kind === "death" ? "anim-death" : "";
@@ -119,11 +135,11 @@ export function Seat({
       {(player.equipment.length > 0 || innate) && (
         <div className="mt-1 flex flex-wrap gap-0.5">
           {player.equipment.map((c) => (
-            <CardFace key={c.id} card={c} size="xs" />
+            <CardFace key={c.id} card={c} size="xs" onHover={cardHover(c)} />
           ))}
           {/* 같은 이름의 진짜 카드를 이미 장착했으면 중복해서 보여주지 않는다 */}
-          {innate && !player.equipment.some((c) => c.name === innate) && (
-            <CardFace card={{ id: `innate-${player.id}`, name: innate, suit: "S", rank: 1 }} size="xs" ghost />
+          {innateCard && !player.equipment.some((c) => c.name === innateCard.name) && (
+            <CardFace card={innateCard} size="xs" ghost onHover={cardHover(innateCard, true)} />
           )}
         </div>
       )}
@@ -132,7 +148,7 @@ export function Seat({
       {player.hand && !isMe && (
         <div className="mt-1 flex flex-wrap gap-0.5 border-t border-white/10 pt-1">
           {player.hand.map((c) => (
-            <CardFace key={c.id} card={c} size="xs" />
+            <CardFace key={c.id} card={c} size="xs" onHover={cardHover(c)} />
           ))}
         </div>
       )}

@@ -29,7 +29,11 @@ function readHelpOn(): boolean {
   }
 }
 
-type HelpFocus = { kind: "card"; card: Card } | { kind: "seat"; player: PlayerView } | { kind: "role"; role: NonNullable<PlayerView["role"]> };
+/** plain: 손패가 아니라 화면에 깔린 남의 카드 — "지금 낼 수 있나"는 물어봐야 소용없다 */
+type HelpFocus =
+  | { kind: "card"; card: Card; plain?: boolean; ghost?: boolean }
+  | { kind: "seat"; player: PlayerView }
+  | { kind: "role"; role: NonNullable<PlayerView["role"]> };
 
 type Mode =
   | { kind: "idle" }
@@ -155,7 +159,7 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
   const help: HelpText | null = !helpOn
     ? null
     : focus?.kind === "card"
-      ? explainCard(game, me, focus.card, canPlayNow)
+      ? cardHelp(explainCard(game, focus.plain ? undefined : me, focus.card, canPlayNow), focus.ghost)
       : focus?.kind === "seat"
         ? explainSeat(game, me, focus.player)
         : focus?.kind === "role"
@@ -163,7 +167,8 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
           : null;
   const helpHint = isTouch ? "카드나 자리를 한 번 탭하면 설명, 한 번 더 탭하면 사용" : "카드나 자리에 마우스를 올리면 설명이 나옵니다";
 
-  const prompt = isPlayer && me ? buildPrompt(game, me, iRespond, myTurn, mode, setMode, send, busy) : null;
+  const focusCard = helpOn ? (card: Card | null) => setFocus(card ? { kind: "card", card, plain: true } : null) : undefined;
+  const prompt = isPlayer && me ? buildPrompt(game, me, iRespond, myTurn, mode, setMode, send, busy, focusCard) : null;
   const urgent = iRespond || (myTurn && !top);
   const activeName = game.names[game.responder] ?? "";
 
@@ -244,7 +249,11 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
                   </div>
                   <div className="text-center">
                     {game.discardTop ? (
-                      <CardFace card={game.discardTop} size="sm" />
+                      <CardFace
+                        card={game.discardTop}
+                        size="sm"
+                        onHover={helpOn ? (on) => setFocus(on ? { kind: "card", card: game.discardTop!, plain: true } : null) : undefined}
+                      />
                     ) : (
                       <div className="h-16 w-11 rounded-lg border-2 border-dashed border-white/15" />
                     )}
@@ -267,6 +276,7 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
                   effect={events.seat[p.id]}
                   onTarget={() => onSeatClick(p)}
                   onHover={helpOn ? (on) => setFocus(on ? { kind: "seat", player: p } : null) : undefined}
+                  onCardHover={helpOn ? (card, ghost) => setFocus(card ? { kind: "card", card, plain: true, ghost } : null) : undefined}
                 />
               ))}
             />
@@ -310,7 +320,13 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
                   </Button>
                 )}
                 {mode.target.equipment.map((c) => (
-                  <CardFace key={c.id} card={c} size="sm" onClick={() => send({ type: "play", cardId: mode.card.id, targetId: mode.target.id, targetCardId: c.id })} />
+                  <CardFace
+                    key={c.id}
+                    card={c}
+                    size="sm"
+                    onClick={() => send({ type: "play", cardId: mode.card.id, targetId: mode.target.id, targetCardId: c.id })}
+                    onHover={focusCard ? (on) => focusCard(on ? c : null) : undefined}
+                  />
                 ))}
                 <button className="text-xs underline" onClick={() => setMode({ kind: "idle" })}>
                   취소
@@ -444,6 +460,11 @@ function SpectatorBadge({ spectators, meId }: { spectators: RoomView["spectators
   );
 }
 
+/** 캐릭터가 원래 가진 효과는 카드처럼 생겼지만 뺏기지 않는다 — 설명에 그 차이를 붙인다 */
+function cardHelp(help: HelpText, ghost?: boolean): HelpText {
+  return ghost ? { ...help, body: `${help.body} 캐릭터 능력이라 뺏기거나 버려지지 않습니다.` } : help;
+}
+
 // ---------- 프롬프트 빌더 ----------
 
 function buildPrompt(
@@ -455,6 +476,8 @@ function buildPrompt(
   setMode: (m: Mode) => void,
   send: (a: Action) => Promise<void>,
   busy: boolean,
+  /** 프롬프트에 깔린 카드도 손패처럼 설명 줄에 띄운다 (도움말이 꺼져 있으면 undefined) */
+  onCardHover?: (card: Card | null) => void,
 ) {
   const hand = me.hand ?? [];
   const top = game.pending[game.pending.length - 1];
@@ -516,7 +539,7 @@ function buildPrompt(
               뱅! 사용 ({cards.length}장 보유)
             </Button>
             <Button variant="danger" disabled={busy} onClick={() => send({ type: "respond", cardIds: [] })}>
-              {top.kind === "indians" ? "맞는다" : "포기"}
+              {top.kind === "indians" ? "맞는다" : "맞기"}
             </Button>
           </>,
           true,
@@ -525,7 +548,16 @@ function buildPrompt(
       case "generalStore":
         return box(
           "잡화점 — 1장을 고르세요",
-          top.cards.map((c) => <CardFace key={c.id} card={c} size="sm" disabled={busy} onClick={() => send({ type: "pickCards", cardIds: [c.id] })} />),
+          top.cards.map((c) => (
+            <CardFace
+              key={c.id}
+              card={c}
+              size="sm"
+              disabled={busy}
+              onClick={() => send({ type: "pickCards", cardIds: [c.id] })}
+              onHover={onCardHover ? (on) => onCardHover(on ? c : null) : undefined}
+            />
+          )),
         );
       case "kitCarlson":
         return box(
@@ -537,6 +569,7 @@ function buildPrompt(
                 card={c}
                 size="sm"
                 selected={selectedIds.includes(c.id)}
+                onHover={onCardHover ? (on) => onCardHover(on ? c : null) : undefined}
                 onClick={() => {
                   const ids = selectedIds.includes(c.id) ? selectedIds.filter((i) => i !== c.id) : [...selectedIds, c.id].slice(-2);
                   setMode({ kind: "multi", purpose: "pick", count: 2, ids });
