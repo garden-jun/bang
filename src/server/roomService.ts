@@ -62,7 +62,7 @@ export function toRoomView(room: RoomState, session: Session, now: number): Room
   // 단, 봇 차례에는 사람이 구경만 하므로 봇이 두는 속도(BOT_MIN_MOVE_MS, 기본 1650)에 맞춘다 —
   // 여기만 빨리 당기면 같은 상태를 헛되이 다시 받을 뿐이고, 더 느리면 여러 수가 한 번에
   // 몰려 와서 무슨 일이 있었는지 못 본다.
-  let pollMs = 2000;
+  let pollMs = 1200;
   if (room.status === "playing" && game) {
     if (game.responder === session.playerId) pollMs = 700;
     else pollMs = room.players.find((p) => p.id === game.responder)?.isBot ? 1800 : 800;
@@ -230,7 +230,13 @@ export async function createRoom(session: Session, input: Partial<RoomSettings>)
   return toRoomView(room, session, now);
 }
 
-export async function joinRoom(session: Session, code: string, as: "player" | "spectator"): Promise<RoomView> {
+/**
+ * `as: "auto"`는 자리 상황을 **락 안에서** 보고 정한다.
+ * 예전에는 클라이언트가 `roomInfo`를 먼저 읽어 player/spectator를 골랐는데,
+ * 그 왕복이 입장 경로에 그대로 얹혔고 값도 이미 낡은 것이었다 — 마지막 한 자리에
+ * 두 명이 동시에 들어오면 한 명은 관전으로 내려가지 않고 에러를 보고 튕겼다.
+ */
+export async function joinRoom(session: Session, code: string, as: "player" | "spectator" | "auto"): Promise<RoomView> {
   const current = await getRoomOf(session.playerId);
   if (current && current !== code) await leaveRoom(session, current).catch(() => {});
 
@@ -238,7 +244,15 @@ export async function joinRoom(session: Session, code: string, as: "player" | "s
     const now = Date.now();
     const existing = memberOf(room, session.playerId);
     const seat = seatOf(room, session.playerId);
-    if (existing && (seat === as || room.status !== "waiting")) {
+    const want: "player" | "spectator" =
+      as !== "auto"
+        ? as
+        : existing && seat !== "none"
+          ? seat // 이미 앉아 있으면 그 자리를 유지한다 (자동 입장이 자리를 옮기면 안 된다)
+          : room.status === "waiting" && room.players.length < room.settings.maxPlayers
+            ? "player"
+            : "spectator";
+    if (existing && (seat === want || room.status !== "waiting")) {
       existing.lastSeen = now;
       existing.nickname = session.nickname;
       tick(room, now);
@@ -250,7 +264,7 @@ export async function joinRoom(session: Session, code: string, as: "player" | "s
       room.spectators = room.spectators.filter((p) => p.id !== existing.id);
     }
     const member: RoomMember = existing ?? { id: session.playerId, nickname: session.nickname, lastSeen: now };
-    if (as === "player") {
+    if (want === "player") {
       if (room.status === "playing") throw new ApiError(400, "진행 중인 게임에는 관전으로만 들어갈 수 있습니다.");
       if (room.players.length >= room.settings.maxPlayers) throw new ApiError(400, "방이 가득 찼습니다.");
       room.players.push(member);

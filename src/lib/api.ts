@@ -73,7 +73,9 @@ export const api = {
   listRooms: () => request<RoomSummary[]>("/api/rooms"),
   roomInfo: (code: string) => request<RoomSummary>(`/api/rooms/${code}/info`),
   createRoom: (settings: Partial<RoomSettings>) => request<RoomView>("/api/rooms", { method: "POST", json: settings }),
-  join: (code: string, as: "player" | "spectator") => request<RoomView>(`/api/rooms/${code}/join`, { method: "POST", json: { as } }),
+  /** "auto"는 서버가 락 안에서 자리 여부를 보고 player/spectator를 정한다 */
+  join: (code: string, as: "player" | "spectator" | "auto") =>
+    request<RoomView>(`/api/rooms/${code}/join`, { method: "POST", json: { as } }),
   leave: (code: string) => request<{ ok: true }>(`/api/rooms/${code}/leave`, { method: "POST" }),
   state: (code: string, since: number | null) =>
     request<RoomView | null>(`/api/rooms/${code}/state${since !== null ? `?since=${since}` : ""}`),

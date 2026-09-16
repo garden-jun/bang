@@ -42,7 +42,7 @@ export default function RoomPage() {
 
   /** 입장하는 순간에 세션을 만든다 (닉네임만 받는 화면을 따로 두지 않으려고) */
   const join = useCallback(
-    async (as: "player" | "spectator") => {
+    async (as: "player" | "spectator" | "auto") => {
       if (!ready) return;
       setJoinError(null);
       setBusy(true);
@@ -64,16 +64,19 @@ export default function RoomPage() {
   // 저장된 닉네임이 있으면 묻지 않고 바로 들어간다 — 대기 중이고 자리가 있으면 플레이어, 아니면 관전.
   // 방을 만든 사람도 이 경로로 자연스럽게 자기 방에 들어간다. 자리는 대기실에서 바꿀 수 있다.
   // 지금 타이핑 중인 닉네임으로는 자동 입장하지 않는다 (한 글자 치자마자 들어가 버린다).
+  //
+  // 자리 여부는 서버가 락 안에서 본다("auto"). 예전에는 roomInfo를 기다렸다가 player/spectator를
+  // 골랐는데, 그 왕복(약 0.23초)이 입장 경로에 직렬로 얹혀 남들 화면에 내가 늦게 떴다.
+  // 이제 roomInfo는 아래 화면 표시용으로만 쓰이고 입장과 나란히 간다.
   const autoJoin = typedNick === null && ready;
   const autoTried = useRef(false);
   useEffect(() => {
     if (member || autoTried.current || busy || !autoJoin) return;
-    if (!info || info === "missing" || session.status === "loading") return;
-    const canPlay = info.status === "waiting" && info.players < info.maxPlayers;
+    if (info === "missing" || session.status === "loading") return;
     // 렌더 직후 동기 setState를 피하려고 한 틱 미룬다
     const t = setTimeout(() => {
       autoTried.current = true;
-      void join(canPlay ? "player" : "spectator");
+      void join("auto");
     }, 0);
     return () => clearTimeout(t);
   }, [member, busy, autoJoin, info, session.status, join]);
@@ -108,10 +111,11 @@ export default function RoomPage() {
   }
 
   if (!member) {
+    // 자동 입장은 roomInfo를 기다리지 않는다 — 이 확인이 먼저 와야 "불러오는 중"에서 멈추지 않는다
+    if (busy || (autoJoin && !joinError)) return <Center>입장하는 중…</Center>;
     if (!info) return <Center>불러오는 중…</Center>;
     const full = info.players >= info.maxPlayers;
     const playing = info.status === "playing";
-    if (busy || (autoJoin && !joinError)) return <Center>입장하는 중…</Center>;
     return (
       <Center>
         <Panel title={`${info.hostNickname}의 방 · ${code}`} className="w-full max-w-sm">
