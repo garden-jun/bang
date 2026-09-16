@@ -4,7 +4,7 @@ import { CHARACTER_KO, ROLE_KO } from "@/game/i18n";
 import type { Card, CardName, CharacterName } from "@/game/types";
 import type { PlayerView } from "@/game/view";
 import type { SeatBadge, SeatEffect } from "@/hooks/useGameEvents";
-import { CardBack, CardFace, CardIcon } from "./CardFace";
+import { CardFace, CardIcon } from "./CardFace";
 
 /**
  * 장착 카드 없이도 늘 가지고 있는 효과. 좌석에 안 보이면 "머스탱도 없는데 왜 거리가 2지?"가 된다.
@@ -143,8 +143,10 @@ export function Seat({
             <span className="text-red-500">{"♥".repeat(Math.max(0, player.hp))}</span>
             <span className="text-white/15">{"♥".repeat(Math.max(0, player.maxHp - player.hp))}</span>
           </span>
-          <span className="ml-auto flex items-center gap-0.5 text-white/50">
-            <CardBack size="xs" count={player.handCount} />
+          {/* 손패 수 — 카드 뒷면을 통째로 그리면 좌석 높이의 절반을 먹어 좌석끼리 겹쳤다 */}
+          <span className="ml-auto flex items-center gap-1 font-bold text-white/80" title={`손패 ${player.handCount}장`}>
+            <span className="h-3.5 w-2.5 rounded-sm border border-red-950 bg-[repeating-linear-gradient(45deg,#7f1d1d_0_2px,#9f1239_2px_4px)]" />
+            {player.handCount}
           </span>
         </div>
 
@@ -174,11 +176,11 @@ export function Seat({
         {(player.equipment.length > 0 || innate) && (
           <div className="mt-1 flex flex-wrap gap-0.5" data-equip={player.id}>
             {player.equipment.map((c) => (
-              <CardFace key={c.id} card={c} size="xs" onHover={cardHover(c)} />
+              <CardFace key={c.id} card={c} size="chip" onHover={cardHover(c)} />
             ))}
             {/* 같은 이름의 진짜 카드를 이미 장착했으면 중복해서 보여주지 않는다 */}
             {innateCard && !player.equipment.some((c) => c.name === innateCard.name) && (
-              <CardFace card={innateCard} size="xs" ghost onHover={cardHover(innateCard, true)} />
+              <CardFace card={innateCard} size="chip" ghost onHover={cardHover(innateCard, true)} />
             )}
           </div>
         )}
@@ -187,7 +189,7 @@ export function Seat({
         {player.hand && !isMe && (
           <div className="mt-1 flex flex-wrap gap-0.5 border-t border-white/10 pt-1">
             {player.hand.map((c) => (
-              <CardFace key={c.id} card={c} size="xs" onHover={cardHover(c)} />
+              <CardFace key={c.id} card={c} size="chip" onHover={cardHover(c)} />
             ))}
           </div>
         )}

@@ -72,7 +72,8 @@ export function CardFace({
   title,
 }: {
   card: Card;
-  size?: "xs" | "sm" | "md" | "lg";
+  /** chip: 좌석 장착 줄용 — 이름을 빼고 무늬와 아이콘만 (이름은 올리면 설명에) */
+  size?: "chip" | "xs" | "sm" | "md" | "lg";
   selected?: boolean;
   disabled?: boolean;
   /** 낼 수는 있지만 지금 주목 대상이 아닐 때 (예: 다른 카드를 조준 중) */
@@ -91,13 +92,14 @@ export function CardFace({
     weapon: "border-stone-500/70 bg-gradient-to-b from-stone-100 to-stone-300 text-stone-900",
   }[kind];
   const dims = {
+    chip: "h-8 w-6 p-px",
     xs: "h-11 w-8 p-0.5",
     sm: "h-16 w-11 p-1",
     md: "h-24 w-[4.25rem] p-1.5",
     lg: "h-28 w-20 p-2",
   }[size];
-  const icon = { xs: "h-4 w-4", sm: "h-6 w-6", md: "h-9 w-9", lg: "h-11 w-11" }[size];
-  const nameSize = { xs: "text-[8px]", sm: "text-[10px]", md: "text-xs", lg: "text-sm" }[size];
+  const icon = { chip: "h-3.5 w-3.5", xs: "h-4 w-4", sm: "h-6 w-6", md: "h-9 w-9", lg: "h-11 w-11" }[size];
+  const nameSize = { chip: "text-[8px]", xs: "text-[8px]", sm: "text-[10px]", md: "text-xs", lg: "text-sm" }[size];
   const info = CARD_KO[card.name];
   const interactive = !!onClick && !disabled;
   const label = ghost ? `${info.name} (캐릭터 능력 — 실제 카드가 아니라 뺏기지 않습니다)` : `${info.name} — ${info.desc}`;
@@ -127,7 +129,7 @@ export function CardFace({
         {ghost ? "능력" : `${SUIT_SYMBOL[card.suit]}${RANK[card.rank] ?? card.rank}`}
       </span>
       <CardIcon name={card.name} className={`${icon} opacity-80`} />
-      <span className={`w-full break-keep text-center leading-tight ${nameSize}`}>{info.name}</span>
+      {size === "chip" ? <span /> : <span className={`w-full break-keep text-center leading-tight ${nameSize}`}>{info.name}</span>}
     </button>
   );
 }

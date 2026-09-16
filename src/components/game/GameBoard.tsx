@@ -24,8 +24,8 @@ const NEEDS_TARGET_CARD: ReadonlySet<CardName> = new Set(["panic", "catBalou"]);
 
 const HELP_KEY = "bang.help";
 
-/** 날아간 카드가 도착지에서 갖는 크기 — 손패 카드(md) 대비. 좌석 장비 줄은 xs, 버림 더미는 sm */
-const TO_EQUIP = 0.47;
+/** 날아간 카드가 도착지에서 갖는 크기 — 손패 카드(md) 대비. 좌석 장비 줄은 chip, 버림 더미는 sm */
+const TO_EQUIP = 0.34;
 const TO_DISCARD = 0.65;
 const seatEl = (id: string) => document.querySelector<HTMLElement>(`[data-seat="${id}"]`);
 
