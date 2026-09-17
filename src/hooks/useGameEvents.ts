@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Card, CardMove, CheckKind, LogMeta } from "@/game/types";
 import type { GameView } from "@/game/view";
-import { discardArrival, landMs } from "@/shared/landing";
+import { discardArrival, handLandMs, landMs } from "@/shared/landing";
 import { CHECK_HOLD_MS, MIN_STEP_MS, stepMs } from "@/shared/pacing";
 import type { RoomView } from "@/shared/types";
 
@@ -70,6 +70,8 @@ export interface FlightEvent {
 
 interface Beat {
   msg: string | null;
+  /** 장면이 시작된 뒤 카드가 도착지에 닿기까지 */
+  landMs?: number;
   /** 로그 줄에서 온 장면이면 그 줄 번호 — 카드가 도착하면 손패 수·버림 더미를 여기까지 반영한다 */
   t?: number;
   /** 이 줄에서 버림 더미에 마지막으로 얹히는 카드 */
@@ -161,6 +163,9 @@ export function useGameEvents(view: RoomView | null) {
           const mine = `hand:${meId.current}`;
           const moves = l.moves?.filter((mv) => mv.from !== mine && mv.to !== mine);
           if (moves?.length) beat.flight = { moves, key: ++effectKey.current };
+          // 내 손패에서 나간 카드는 FlyAway가 날린다 — 그 카드가 닿는 시각도 기다린다
+          const fromMine = l.moves?.filter((mv) => mv.from === mine).length ?? 0;
+          beat.landMs = Math.max(landMs(moves?.length ?? 0), handLandMs(fromMine));
           const m = l.meta;
           if (m?.kind === "dodge") {
             // 막았다는 표시는 좌석 배지로
@@ -214,7 +219,7 @@ export function useGameEvents(view: RoomView | null) {
             landedDiscardT.current = t;
             setLandedDiscard(discard);
           }
-        }, landMs(next.flight?.moves.length ?? 0));
+        }, next.landMs ?? 0);
         landTimers.current.add(land);
       }
       // 내 차례인데 밀린 장면이 남아 있으면 빠르게 따라잡는다. 큐가 비면(=지금 보여준 게

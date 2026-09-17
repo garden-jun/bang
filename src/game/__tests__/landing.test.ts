@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { discardArrival, landMs, landedBoard } from "@/shared/landing";
+import { discardArrival, handLandMs, landMs, landedBoard } from "@/shared/landing";
 import type { LogEntry } from "../types";
 import { card } from "./util";
 
@@ -15,8 +15,8 @@ const log: LogEntry[] = [
 const game = {
   log,
   players: [
-    { id: "s", handCount: 3 },
-    { id: "o1", handCount: 5 },
+    { id: "s", handCount: 3, equipment: [] },
+    { id: "o1", handCount: 5, equipment: [] },
   ],
   discardTop: heart,
 };
@@ -45,12 +45,39 @@ describe("카드가 도착한 만큼만 보여주기", () => {
   });
 
   it("손패 수는 음수가 되지 않는다 (로그에 없는 이동이 섞여도)", () => {
-    const g = { ...game, players: [{ id: "s", handCount: 0 }, { id: "o1", handCount: 1 }] };
+    const g = { ...game, players: [{ id: "s", handCount: 0, equipment: [] }, { id: "o1", handCount: 1, equipment: [] }] };
     expect(landedBoard(g, 10, undefined).handCount).toEqual({ s: 1, o1: 0 });
+  });
+
+  it("장착 카드는 날아가 닿은 뒤에 좌석에 깔린다 — 내 것도", () => {
+    const barrel = card("barrel"), volcanic = card("volcanic"), schofield = card("schofield");
+    const g = {
+      log: [
+        { t: 1, msg: "술통 장착", moves: [{ from: "hand:s", to: "equip:s", card: barrel }] },
+        {
+          t: 2,
+          msg: "볼캐닉 장착",
+          moves: [
+            { from: "equip:o1", to: "discard", card: schofield },
+            { from: "hand:o1", to: "equip:o1", card: volcanic },
+          ],
+        },
+      ] satisfies LogEntry[],
+      players: [
+        { id: "s", handCount: 0, equipment: [barrel] },
+        { id: "o1", handCount: 0, equipment: [volcanic] },
+      ],
+    };
+    // liveId(나)여도 장착은 늦춘다
+    expect(landedBoard(g, 0, undefined, "s").equipment).toEqual({ s: [], o1: [schofield] });
+    expect(landedBoard(g, 1, undefined, "s").equipment).toEqual({ s: [barrel], o1: [schofield] });
+    expect(landedBoard(g, 2, undefined, "s").equipment).toEqual({ s: [barrel], o1: [volcanic] });
   });
 
   it("도착 시각: 여러 장이면 마지막 카드 기준, 날릴 카드가 없으면 바로", () => {
     expect(landMs(0)).toBe(0);
     expect(landMs(2)).toBeGreaterThan(landMs(1));
+    expect(handLandMs(0)).toBe(0);
+    expect(handLandMs(1)).toBeGreaterThan(0);
   });
 });

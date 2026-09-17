@@ -2,9 +2,7 @@
 
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import type { Card } from "@/game/types";
-
-/** 한꺼번에 여러 장을 버릴 때 한 장씩 보이도록 */
-const STAGGER_MS = 90;
+import { HAND_FLY_MS, HAND_FLY_STAGGER_MS } from "@/shared/landing";
 
 /**
  * 손패에서 빠져나간 카드를 도착지까지 날려 보낸다.
@@ -56,7 +54,9 @@ export function useFlyAway(
       node.style.setProperty("--fly-x", `${Math.round(dest.left + dest.width / 2 - (rect.left + rect.width / 2))}px`);
       node.style.setProperty("--fly-y", `${Math.round(dest.top + dest.height / 2 - (rect.top + rect.height / 2))}px`);
       node.style.setProperty("--fly-s", `${scale}`);
-      node.style.animationDelay = `${slot++ * STAGGER_MS}ms`;
+      // 한꺼번에 여러 장을 버릴 때 한 장씩 보이도록. 길이는 장착 줄이 바뀌는 시각(handLandMs)과 같은 숫자
+      node.style.setProperty("--fly-ms", `${HAND_FLY_MS}ms`);
+      node.style.animationDelay = `${slot++ * HAND_FLY_STAGGER_MS}ms`;
       node.classList.add("anim-fly");
       node.addEventListener("animationend", () => node.remove(), { once: true });
       layer.appendChild(node);

@@ -113,7 +113,7 @@ body {
   100% { transform: translate(var(--fly-x, 0), var(--fly-y, 0)) scale(var(--fly-s, 0.6)) rotate(5deg); opacity: 0; }
 }
 .anim-fly {
-  animation: bang-fly 460ms cubic-bezier(0.4, 0, 0.35, 1) forwards;
+  animation: bang-fly var(--fly-ms, 460ms) cubic-bezier(0.4, 0, 0.35, 1) forwards;
 }
 
 /* 남의 카드가 오가는 장면 — 출발·도착은 CardFlights가 픽셀로 넣어준다.

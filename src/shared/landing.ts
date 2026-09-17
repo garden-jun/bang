@@ -12,6 +12,12 @@ export const flightStepMs = (n: number) => Math.min(STAGGER_MS, MAX_STAGGER_TOTA
  */
 export const landMs = (n: number) => (n > 0 ? Math.round(FLIGHT_MS * 0.8 + (n - 1) * flightStepMs(n)) : 0);
 
+/** 내 손패에서 나가는 카드가 날아가는 시간과 간격 (FlyAway) */
+export const HAND_FLY_MS = 460;
+export const HAND_FLY_STAGGER_MS = 90;
+/** 내 손패에서 n장이 나갈 때 마지막 카드가 도착지에 닿는 시각. 이 연출은 끝까지 도착지로 다가가며 흐려진다 */
+export const handLandMs = (n: number) => (n > 0 ? Math.round(HAND_FLY_MS * 0.85 + (n - 1) * HAND_FLY_STAGGER_MS) : 0);
+
 /**
  * 한 로그 줄에서 버림 더미에 마지막으로 얹히는 카드 — 낸 카드든 판정 카드든.
  * 판정 카드는 이동(moves)이 아니라 check 메타로만 온다 (테이블 중앙 패널이 따로 보여준다).
@@ -37,12 +43,13 @@ export function discardArrival(line: Pick<LogEntry, "meta" | "moves">): Card | u
  * @param liveId 손패 수를 늦추지 않을 사람 — 내 손패는 카드가 즉시 보이니 숫자만 늦으면 어긋난다
  */
 export function landedBoard(
-  game: { log: LogEntry[]; players: { id: string; handCount: number }[]; discardTop?: Card },
+  game: { log: LogEntry[]; players: { id: string; handCount: number; equipment: Card[] }[]; discardTop?: Card },
   landedT: number,
   landedDiscard: Card | undefined,
   liveId?: string,
-): { handCount: Record<string, number>; discardTop?: Card } {
+): { handCount: Record<string, number>; equipment: Record<string, Card[]>; discardTop?: Card } {
   const handCount = Object.fromEntries(game.players.map((p) => [p.id, p.handCount]));
+  const equipment = Object.fromEntries(game.players.map((p) => [p.id, p.equipment]));
   let discardPending = false;
   for (const line of game.log) {
     if (line.t <= landedT) continue;
@@ -51,9 +58,19 @@ export function landedBoard(
       const from = m.from.startsWith("hand:") ? m.from.slice(5) : null;
       if (to !== null && to !== liveId && to in handCount) handCount[to] -= 1;
       if (from !== null && from !== liveId && from in handCount) handCount[from] += 1;
+      // 장착 카드는 내 것도 늦춘다 — 손패에서 날아간 카드가 닿기 전에 좌석에 먼저 깔리면 안 된다.
+      // 장착 카드는 모두에게 공개라 이동에 늘 card가 실려 있다
+      const card = m.card;
+      if (!card) continue;
+      const eqTo = m.to.startsWith("equip:") ? m.to.slice(6) : null;
+      const eqFrom = m.from.startsWith("equip:") ? m.from.slice(6) : null;
+      if (eqTo !== null && eqTo in equipment) equipment[eqTo] = equipment[eqTo].filter((c) => c.id !== card.id);
+      if (eqFrom !== null && eqFrom in equipment && !equipment[eqFrom].some((c) => c.id === card.id)) {
+        equipment[eqFrom] = [...equipment[eqFrom], card];
+      }
     }
     if (discardArrival(line)) discardPending = true;
   }
   for (const id in handCount) handCount[id] = Math.max(0, handCount[id]);
-  return { handCount, discardTop: discardPending ? landedDiscard : game.discardTop };
+  return { handCount, equipment, discardTop: discardPending ? landedDiscard : game.discardTop };
 }

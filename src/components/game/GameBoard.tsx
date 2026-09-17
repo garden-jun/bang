@@ -326,7 +326,7 @@ export function GameBoard({ view, act, onLeave }: { view: RoomView; act: (a: Act
               seats={seats.map((p) => (
                 <Seat
                   key={p.id}
-                  player={{ ...p, handCount: board.handCount[p.id] ?? p.handCount }}
+                  player={{ ...p, handCount: board.handCount[p.id] ?? p.handCount, equipment: board.equipment[p.id] ?? p.equipment }}
                   name={game.names[p.id]}
                   isMe={p.id === meId}
                   isActive={game.responder === p.id && p.alive}
